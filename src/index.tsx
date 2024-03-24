@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import styles from './index.less'
-import Demo from './Demo'
+import {main} from './Demo'
 
 /* eslint-disable */
 if ((module as any).hot) {
@@ -9,14 +9,14 @@ if ((module as any).hot) {
 }
 /* eslint-enable */
 
-const {useCallback} = React
+const {useEffect, useCallback} = React
 
 export default function App() {
 	const canvasRef = useCallback((dom: HTMLCanvasElement) => {
 		if (dom) {
 			dom.width = dom.offsetWidth
 			dom.height = dom.offsetHeight
-			const demo = new Demo({dom})
+			main(dom)
 		}
 	}, [])
 
