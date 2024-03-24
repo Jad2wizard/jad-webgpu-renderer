@@ -1,0 +1,60 @@
+{
+	"env": {
+		"browser": true,
+		"es6": true,
+		"node": true,
+		"commonjs": true,
+		"jest": true
+	},
+	"extends": [
+		"eslint:recommended",
+		"plugin:react/recommended",
+		"plugin:@typescript-eslint/recommended",
+		"prettier"
+	],
+	"parserOptions": {
+		"ecmaFeatures": {
+			"experimentalObjectRestSpread": true,
+			"jsx": true
+		},
+		"sourceType": "module"
+	},
+	"plugins": ["react", "react-hooks", "@typescript-eslint", "prettier"],
+	"parser": "@typescript-eslint/parser",
+	"rules": {
+		"indent": ["error", "tab", {"SwitchCase": 1}],
+		"react/jsx-uses-react": "error",
+		"react/jsx-uses-vars": "error",
+		"react-hooks/rules-of-hooks": "error",
+		"react-hooks/exhaustive-deps": "warn",
+		"no-console": "warn",
+		"no-unused-vars": "off",
+		"prefer-const": "off",
+		"eqeqeq": [
+			"error",
+			"always",
+			{
+				"null": "ignore"
+			}
+		],
+		"prettier/prettier": "error",
+		"react/prop-types": 0,
+		"@typescript-eslint/no-unused-vars": "off",
+		"@typescript-eslint/no-empty-function": "off",
+		"@typescript-eslint/explicit-function-return-type": "off",
+		"@typescript-eslint/ban-ts-ignore": "off",
+		"@typescript-eslint/member-delimiter-style": [
+			"error",
+			{
+				"multiline": {
+					"delimiter": "none",
+					"requireLast": true
+				},
+				"singleline": {
+					"delimiter": "semi",
+					"requireLast": false
+				}
+			}
+		]
+	}
+}

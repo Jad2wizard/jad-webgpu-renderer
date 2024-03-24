@@ -1,0 +1,23 @@
+{
+	"compilerOptions": {
+		"sourceMap": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"outDir": "./lib",
+		"declaration": true,
+		"declarationDir": "./typings",
+		"module": "commonjs", //tsc will throw ES6 module error if setting 'es6' in there
+		// Search under node_modules for non-relative imports.
+		"moduleResolution": "node",
+		"target": "esnext",
+		"jsx": "react",
+		"typeRoots": ["node_modules/@types", "./typings/*", "node_modules/@webgpu/types"],
+		"baseUrl": ".",
+		"paths": {
+			"three-examples/*": ["node_modules/three/examples/*"],
+			"utils": ["src/webgl/utils"]
+		}
+	},
+	"include": ["./src/**/*"],
+	"exclude": ["node_modules", "./typings/**/*"]
+}

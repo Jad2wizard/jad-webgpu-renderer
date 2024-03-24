@@ -1,0 +1,47 @@
+{
+	"presets": [
+		[
+			"@babel/preset-env",
+			{
+				"useBuiltIns": "usage",
+				"corejs": "3",
+				"modules": false,
+				"debug": false
+			}
+		],
+		"@babel/preset-typescript",
+		"@babel/preset-react"
+	],
+	"plugins": [
+		"@babel/proposal-class-properties",
+		"@babel/proposal-object-rest-spread",
+		"@babel/plugin-proposal-export-default-from",
+		[
+			"@babel/plugin-proposal-decorators",
+			{
+				"legacy": true
+			}
+		],
+		[
+			"import",
+			{
+				"libraryName": "antd"
+			},
+			"antd"
+		]
+	],
+	"env": {
+		"test": {
+			"presets": [
+				[
+					"@babel/preset-env",
+					{
+						"useBuiltIns": "usage",
+						"corejs": "3",
+						"debug": false
+					}
+				]
+			]
+		}
+	}
+}

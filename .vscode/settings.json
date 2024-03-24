@@ -1,0 +1,29 @@
+{
+	"editor.fontSize": 16,
+	"[javascript]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"explorer.confirmDelete": false,
+	"window.titleBarStyle": "custom",
+	"sync.gist": "50f6226a8b7a78883e767ab9c7d00711",
+	"files.autoSave": "onFocusChange",
+	"prettier.requireConfig": true,
+	"editor.formatOnSave": true,
+	"jest.autoEnable": false,
+	"eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+	"typescript.tsdk": "node_modules/typescript/lib",
+	"vim.normalModeKeyBindings": [
+		{
+			"before": ["K"],
+			"after": ["i", "<Enter>", "<Esc>"]
+		}
+	],
+	"vim.normalModeKeyBindingsNonRecursive": [
+		{
+			"before": ["<CR>"],
+			"after": ["o", "<Esc>"]
+		}
+	],
+	"backgroundCover.imagePath": "/Users/yaojia/Pictures/Nujabes/桌面/nujabes-wallpaper-23.jpg",
+	"backgroundCover.opacity": 0.4
+}
