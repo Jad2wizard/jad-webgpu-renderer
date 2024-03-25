@@ -11,12 +11,81 @@ function rand(min?: any, max?: any) {
 	return min + Math.random() * (max - min)
 }
 
+function createCircleVertices({
+	radius = 1,
+	numSubdivisions = 24,
+	innerRadius = 0,
+	startAngle = 0,
+	endAngle = Math.PI * 2
+}: {
+	radius?: number
+	numSubdivisions?: number
+	innerRadius?: number
+	startAngle?: number
+	endAngle?: number
+}) {
+	const numVertices = numSubdivisions * 3 * 2
+	//vertexData 中包含两个 float32的 position 和四个 uint8的 color。四个 uint8的 color 长度等于一个 float32
+	const vertexData = new Float32Array(numSubdivisions * 3 * 2 * (2 + 1))
+	//创建 vertexData 的 Uint8Array 视图，用于写入uint8类型的 color
+	const colorData = new Uint8Array(vertexData.buffer)
+	let offset = 0
+	let colorOffset = 8 //color 前面有两个 float32组成的 position，两个 float32长度等于8个 uint8
+	const addVertex = (x: number, y: number, r: number, g: number, b: number) => {
+		vertexData[offset++] = x
+		vertexData[offset++] = y
+		offset++ //跳过 position 后面的四个 uint8 组成的 color
+		colorData[colorOffset++] = r * 255
+		colorData[colorOffset++] = g * 255
+		colorData[colorOffset++] = b * 255
+		colorOffset += 9 //跳过 color 最后一个alpha 分量以及 color 后面的 position
+	}
+	const innerColor = [0.9, 0.1, 0]
+	const outerColor = [0.5, 0.6, 0.1]
+
+	// 2 vertices per subdivision
+	//
+	// 0--1 4
+	// | / /|
+	// |/ / |
+	// 2 3--5
+	for (let i = 0; i < numSubdivisions; ++i) {
+		const angle1 = startAngle + ((i + 0) * (endAngle - startAngle)) / numSubdivisions
+		const angle2 = startAngle + ((i + 1) * (endAngle - startAngle)) / numSubdivisions
+
+		const c1 = Math.cos(angle1)
+		const s1 = Math.sin(angle1)
+		const c2 = Math.cos(angle2)
+		const s2 = Math.sin(angle2)
+
+		// first triangle
+		//@ts-ignore
+		addVertex(c1 * radius, s1 * radius, ...outerColor)
+		//@ts-ignore
+		addVertex(c2 * radius, s2 * radius, ...outerColor)
+		//@ts-ignore
+		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
+
+		// second triangle
+		//@ts-ignore
+		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
+		//@ts-ignore
+		addVertex(c2 * radius, s2 * radius, ...outerColor)
+		//@ts-ignore
+		addVertex(c2 * innerRadius, s2 * innerRadius, ...innerColor)
+	}
+
+	return {vertexData, numVertices}
+}
+
 export async function main(canvas: HTMLCanvasElement) {
 	const adapter = await navigator.gpu?.requestAdapter()
 	const device = await adapter?.requestDevice()
 	if (!device) {
 		throw 'need a browser that supports WebGPU'
 	}
+	//@ts-ignore
+	window.device = device
 
 	const presentationFormat = navigator.gpu.getPreferredCanvasFormat()
 	const ctx = canvas.getContext('webgpu')
@@ -29,33 +98,24 @@ export async function main(canvas: HTMLCanvasElement) {
 	const vsModule = device.createShaderModule({
 		label: 'triangle vertex shader with uniforms',
 		code: `
-			struct TransformStruct {
-				scale: vec2f,
-				offset: vec2f
-			}
-
 			struct Output {
 				@builtin(position) position: vec4f,
 				@location(0) color: vec4f
 			}
 
-			@group(0) @binding(0) var<storage, read> transforms: array<TransformStruct>;
-			@group(0) @binding(1) var<storage, read> colors: array<vec4f>;
+			struct Input{
+				@location(0) position: vec2f,
+				@location(1) scale: vec2f,
+				@location(2) offset: vec2f,
+				@location(3) color: vec4f
+			}
 
 			@vertex fn vs(
-				@builtin(vertex_index) vi: u32,
-				@builtin(instance_index) ii: u32
+				vert: Input,
 			) -> Output {
-				let pos = array(
-					vec2f(0.0, 0.3),
-					vec2f(-0.3, -0.3),
-					vec2f(0.3, -0.3)
-				);
-
-				let transform = transforms[ii];
 				var output: Output;
-				output.position = vec4f(pos[vi] * transform.scale + transform.offset, 0, 1);
-				output.color = colors[ii];
+				output.position = vec4f(vert.position * vert.scale + vert.offset, 0, 1);
+				output.color = vert.color;
 
 				return output;
 			}
@@ -76,7 +136,25 @@ export async function main(canvas: HTMLCanvasElement) {
 		layout: 'auto',
 		vertex: {
 			module: vsModule,
-			entryPoint: 'vs'
+			entryPoint: 'vs',
+			buffers: [
+				{
+					arrayStride: 2 * 4 + 4,
+					attributes: [
+						{shaderLocation: 0, offset: 0, format: 'float32x2'},
+						{shaderLocation: 3, offset: 4 * 2, format: 'unorm8x4'}
+					]
+				},
+				{
+					//transform
+					arrayStride: (2 + 2) * 4,
+					stepMode: 'instance',
+					attributes: [
+						{shaderLocation: 1, offset: 0, format: 'float32x2'},
+						{shaderLocation: 2, offset: 2 * 4, format: 'float32x2'}
+					]
+				}
+			]
 		},
 		fragment: {
 			module: fsModule,
@@ -86,35 +164,27 @@ export async function main(canvas: HTMLCanvasElement) {
 	})
 
 	const kNumObjects = 100
-	const transformStorageBuffer = device.createBuffer({
-		label: 'transform storage buffer',
+	const transformVertexBuffer = device.createBuffer({
+		label: 'transform vertex buffer',
 		size: kNumObjects * (2 + 2) * 4,
-		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-	})
-	const colorStorageBuffer = device.createBuffer({
-		label: 'color storage buffer',
-		size: kNumObjects * 4 * 4,
-		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+		usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
 	})
 
-	const transformStorageValue = new Float32Array(transformStorageBuffer.size / 4)
-	const colorStorageValue = new Float32Array(colorStorageBuffer.size / 4)
+	const transformVertexValue = new Float32Array(transformVertexBuffer.size / 4)
+	const aspect = canvas.width / canvas.height
 	for (let i = 0; i < kNumObjects; ++i) {
-		colorStorageValue.set([rand(), rand(), rand(), 1], i * 4)
 		const scale = rand(0.3)
-		transformStorageValue.set([scale, scale, rand(-0.9, 0.9), rand(-0.9, 0.9)], i * 4)
+		transformVertexValue.set([scale / aspect, scale, rand(-0.9, 0.9), rand(-0.9, 0.9)], i * 4)
 	}
-	device.queue.writeBuffer(transformStorageBuffer, 0, transformStorageValue)
-	device.queue.writeBuffer(colorStorageBuffer, 0, colorStorageValue)
+	device.queue.writeBuffer(transformVertexBuffer, 0, transformVertexValue)
 
-	//对应vs 里的@group(0) @binding(0)
-	const bindGroup = device.createBindGroup({
-		layout: pipeline.getBindGroupLayout(0),
-		entries: [
-			{binding: 0, resource: {buffer: transformStorageBuffer}},
-			{binding: 1, resource: {buffer: colorStorageBuffer}}
-		]
+	const {vertexData, numVertices} = createCircleVertices({radius: 0.5, innerRadius: 0.25, numSubdivisions: 32})
+	const vertexBuffer = device.createBuffer({
+		label: 'vertex buffer vertices',
+		size: vertexData.byteLength,
+		usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
 	})
+	device.queue.writeBuffer(vertexBuffer, 0, vertexData)
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
 		label: 'our basic canvas renderPass',
@@ -137,8 +207,9 @@ export async function main(canvas: HTMLCanvasElement) {
 
 		const pass = encoder.beginRenderPass(renderPassDescriptor)
 		pass.setPipeline(pipeline)
-		pass.setBindGroup(0, bindGroup)
-		pass.draw(3, kNumObjects)
+		pass.setVertexBuffer(0, vertexBuffer)
+		pass.setVertexBuffer(1, transformVertexBuffer)
+		pass.draw(numVertices, kNumObjects)
 		pass.end()
 
 		const commandBuffer = encoder.finish()
