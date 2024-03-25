@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 //code from webgpu-fundamentals
 export async function main(canvas: HTMLCanvasElement) {
 	const adapter = await navigator.gpu?.requestAdapter()
@@ -14,101 +15,81 @@ export async function main(canvas: HTMLCanvasElement) {
 		format: presentationFormat
 	})
 
-	const module1 = device.createShaderModule({
-		label: 'our hardcoded red triangle shaders',
+	const vsModule = device.createShaderModule({
+		label: 'triangle vertex shader with uniforms',
 		code: `
-			struct VertexOutput {
-				@builtin(position) position: vec4f,
-				@location(0) color: vec4f
+			struct UniformStruct {
+				scale: vec2f,
+				offset: vec2f
+			};
+
+			@group(0) @binding(0) var<uniform> transform: UniformStruct;
+
+			@vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+				let pos = array(
+					vec2f(0.0, 0.3),
+					vec2f(-0.3, -0.3),
+					vec2f(0.3, -0.3)
+				);
+
+				//如果vs 中不使用 transform 变量的话，程序会报 bindGroupLayout entries数量不匹配的问题
+				//应该是着色器代码做了tree-shake 之类的优化，将没有使用的 transform 变量的定义去掉了，
+				//导致 pipeline 自动生成 bindGroupLayout 中吧 transform 对应的 binding 去掉了
+				return vec4f(pos[vi] * transform.scale + transform.offset, 0, 1);
 			}
-
-            @vertex fn vs(
-                @builtin(vertex_index) vertexIndex: u32
-            ) -> VertexOutput {
-                let pos = array(
-                    vec2f(0.0, 0.5),
-                    vec2f(-0.75, -0.5),
-                    vec2f(0.0, -0.5),
-				);
-				
-				let color = array(
-					vec4f(1, 0, 0, 1),
-					vec4f(0, 1, 0, 1),
-					vec4f(0, 0, 1, 1),
-				);
-
-				var output: VertexOutput;
-				output.position = vec4f(pos[vertexIndex], 0.0, 1.0);
-				output.color = color[vertexIndex];
-				return output;
-            }
-
-			//inter-stage variables 与 webgl 的 varying 变量一样，是 vertexShader 输出经过插值后传给 fragmentShader
-			//inter-stage variables不要求 vs的输出格式和 fs 的输入格式一致，只根据@location(?)来标识不同变量。
-			//本例中 vs 输出的是一个包含有 color 和 position 的结构体
-			//但 fs 确接收了两个参数，一个 color 和内置的 position，该 position 并不是 vs输出的 position，而是 fs 内置的输入变量，表示 fs 所处理像素在纹理中的坐标
-            @fragment fn fs(@location(0) color: vec4f, @builtin(position) position: vec4f) -> @location(0) vec4f {
-				let red = vec4f(1, 0, 0, 1);
-				let grid = vec2u(position.xy) / 16;
-				let checker = (grid.x + grid.y) % 2 == 1;
-				return select(red, color, checker);
-				return color;
-            }
-        `
+		`
 	})
 
-	const module2 = device.createShaderModule({
-		label: 'our hardcoded red triangle shaders',
+	const fsModule = device.createShaderModule({
+		label: 'triangle fragment shader with uniforms',
 		code: `
-            @vertex fn vs(
-                @builtin(vertex_index) vertexIndex: u32
-            ) -> @builtin(position) vec4f {
-                let pos = array(
-                    vec2f(0.01, 0.5),
-                    vec2f(0.01, -0.5),
-                    vec2f(0.75, -0.5),
-                );
+			@group(1) @binding(0) var<uniform> color: vec4f;
 
-                return vec4f(pos[vertexIndex], 0.0, 1.0);
-            }
-
-			//fragmentShader 输入的内置 position 为当前像素的坐标
-            @fragment fn fs(@builtin(position) position: vec4f) -> @location(0) vec4f {
-				let red = vec4f(1, 0, 0, 1);
-				let cyan = vec4f(0, 1, 1, 1);
-				let grid = vec2u(position.xy) / 16;
-				let checker = (grid.x + grid.y) % 2 == 1;
-				return select(red, cyan, checker);
-            }
-        `
+			@fragment fn fs() -> @location(0) vec4f {
+				return color;
+			}
+		`
 	})
 
-	const pipeline1 = device.createRenderPipeline({
-		label: 'our hardcoded red triangle pipelien',
-		layout: 'auto', //让webgpu根据shader里的资源定义自动创建pipelineLayout
+	const pipeline = device.createRenderPipeline({
+		label: 'triangle with uniforms',
+		layout: 'auto',
 		vertex: {
-			module: module1,
+			module: vsModule,
 			entryPoint: 'vs'
 		},
 		fragment: {
-			module: module1,
+			module: fsModule,
 			entryPoint: 'fs',
 			targets: [{format: presentationFormat}]
 		}
 	})
 
-	const pipeline2 = device.createRenderPipeline({
-		label: 'our hardcoded red triangle pipelien',
-		layout: 'auto', //让webgpu根据shader里的资源定义自动创建pipelineLayout
-		vertex: {
-			module: module2,
-			entryPoint: 'vs'
-		},
-		fragment: {
-			module: module2,
-			entryPoint: 'fs',
-			targets: [{format: presentationFormat}]
-		}
+	const transformUniformValues = new Float32Array(2 + 2)
+	const colorUniformValue = new Float32Array(4)
+	transformUniformValues.set([0.5, 0.5, 0.3, 0.0])
+	colorUniformValue.set([0, 1, 0, 1])
+
+	const transformUniformBuffer = device.createBuffer({
+		size: transformUniformValues.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+	})
+
+	const colorUniformBuffer = device.createBuffer({
+		size: colorUniformValue.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+	})
+
+	//对应vs 里的@group(0) @binding(0)
+	const bindGroup = device.createBindGroup({
+		layout: pipeline.getBindGroupLayout(0),
+		entries: [{binding: 0, resource: {buffer: transformUniformBuffer}}]
+	})
+
+	//对应 fs 里的@group(1) @binding(0)
+	const bindGroup1 = device.createBindGroup({
+		layout: pipeline.getBindGroupLayout(1),
+		entries: [{binding: 0, resource: {buffer: colorUniformBuffer}}]
 	})
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
@@ -125,14 +106,18 @@ export async function main(canvas: HTMLCanvasElement) {
 
 	function render() {
 		if (!device || !ctx) return
+
+		device.queue.writeBuffer(transformUniformBuffer, 0, transformUniformValues)
+		device.queue.writeBuffer(colorUniformBuffer, 0, colorUniformValue)
+
 		//@ts-ignore
 		renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView()
 		const encoder = device.createCommandEncoder({label: 'our encoder'})
 
 		const pass = encoder.beginRenderPass(renderPassDescriptor)
-		pass.setPipeline(pipeline1)
-		pass.draw(3)
-		pass.setPipeline(pipeline2)
+		pass.setPipeline(pipeline)
+		pass.setBindGroup(0, bindGroup)
+		pass.setBindGroup(1, bindGroup1)
 		pass.draw(3)
 		pass.end()
 
