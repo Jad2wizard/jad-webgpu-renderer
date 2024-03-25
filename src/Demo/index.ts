@@ -1,5 +1,16 @@
 /* eslint-disable no-undef */
 //code from webgpu-fundamentals
+function rand(min?: any, max?: any) {
+	if (min === undefined) {
+		min = 0
+		max = 1
+	} else if (max === undefined) {
+		max = min
+		min = 0
+	}
+	return min + Math.random() * (max - min)
+}
+
 export async function main(canvas: HTMLCanvasElement) {
 	const adapter = await navigator.gpu?.requestAdapter()
 	const device = await adapter?.requestDevice()
@@ -18,24 +29,35 @@ export async function main(canvas: HTMLCanvasElement) {
 	const vsModule = device.createShaderModule({
 		label: 'triangle vertex shader with uniforms',
 		code: `
-			struct UniformStruct {
+			struct TransformStruct {
 				scale: vec2f,
 				offset: vec2f
-			};
+			}
 
-			@group(0) @binding(0) var<uniform> transform: UniformStruct;
+			struct Output {
+				@builtin(position) position: vec4f,
+				@location(0) color: vec4f
+			}
 
-			@vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+			@group(0) @binding(0) var<storage, read> transforms: array<TransformStruct>;
+			@group(0) @binding(1) var<storage, read> colors: array<vec4f>;
+
+			@vertex fn vs(
+				@builtin(vertex_index) vi: u32,
+				@builtin(instance_index) ii: u32
+			) -> Output {
 				let pos = array(
 					vec2f(0.0, 0.3),
 					vec2f(-0.3, -0.3),
 					vec2f(0.3, -0.3)
 				);
 
-				//如果vs 中不使用 transform 变量的话，程序会报 bindGroupLayout entries数量不匹配的问题
-				//应该是着色器代码做了tree-shake 之类的优化，将没有使用的 transform 变量的定义去掉了，
-				//导致 pipeline 自动生成 bindGroupLayout 中吧 transform 对应的 binding 去掉了
-				return vec4f(pos[vi] * transform.scale + transform.offset, 0, 1);
+				let transform = transforms[ii];
+				var output: Output;
+				output.position = vec4f(pos[vi] * transform.scale + transform.offset, 0, 1);
+				output.color = colors[ii];
+
+				return output;
 			}
 		`
 	})
@@ -43,9 +65,7 @@ export async function main(canvas: HTMLCanvasElement) {
 	const fsModule = device.createShaderModule({
 		label: 'triangle fragment shader with uniforms',
 		code: `
-			@group(1) @binding(0) var<uniform> color: vec4f;
-
-			@fragment fn fs() -> @location(0) vec4f {
+			@fragment fn fs(@location(0) color: vec4f) -> @location(0) vec4f {
 				return color;
 			}
 		`
@@ -65,31 +85,35 @@ export async function main(canvas: HTMLCanvasElement) {
 		}
 	})
 
-	const transformUniformValues = new Float32Array(2 + 2)
-	const colorUniformValue = new Float32Array(4)
-	transformUniformValues.set([0.5, 0.5, 0.3, 0.0])
-	colorUniformValue.set([0, 1, 0, 1])
-
-	const transformUniformBuffer = device.createBuffer({
-		size: transformUniformValues.byteLength,
-		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+	const kNumObjects = 100
+	const transformStorageBuffer = device.createBuffer({
+		label: 'transform storage buffer',
+		size: kNumObjects * (2 + 2) * 4,
+		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+	})
+	const colorStorageBuffer = device.createBuffer({
+		label: 'color storage buffer',
+		size: kNumObjects * 4 * 4,
+		usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
 	})
 
-	const colorUniformBuffer = device.createBuffer({
-		size: colorUniformValue.byteLength,
-		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-	})
+	const transformStorageValue = new Float32Array(transformStorageBuffer.size / 4)
+	const colorStorageValue = new Float32Array(colorStorageBuffer.size / 4)
+	for (let i = 0; i < kNumObjects; ++i) {
+		colorStorageValue.set([rand(), rand(), rand(), 1], i * 4)
+		const scale = rand(0.3)
+		transformStorageValue.set([scale, scale, rand(-0.9, 0.9), rand(-0.9, 0.9)], i * 4)
+	}
+	device.queue.writeBuffer(transformStorageBuffer, 0, transformStorageValue)
+	device.queue.writeBuffer(colorStorageBuffer, 0, colorStorageValue)
 
 	//对应vs 里的@group(0) @binding(0)
 	const bindGroup = device.createBindGroup({
 		layout: pipeline.getBindGroupLayout(0),
-		entries: [{binding: 0, resource: {buffer: transformUniformBuffer}}]
-	})
-
-	//对应 fs 里的@group(1) @binding(0)
-	const bindGroup1 = device.createBindGroup({
-		layout: pipeline.getBindGroupLayout(1),
-		entries: [{binding: 0, resource: {buffer: colorUniformBuffer}}]
+		entries: [
+			{binding: 0, resource: {buffer: transformStorageBuffer}},
+			{binding: 1, resource: {buffer: colorStorageBuffer}}
+		]
 	})
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
@@ -107,9 +131,6 @@ export async function main(canvas: HTMLCanvasElement) {
 	function render() {
 		if (!device || !ctx) return
 
-		device.queue.writeBuffer(transformUniformBuffer, 0, transformUniformValues)
-		device.queue.writeBuffer(colorUniformBuffer, 0, colorUniformValue)
-
 		//@ts-ignore
 		renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView()
 		const encoder = device.createCommandEncoder({label: 'our encoder'})
@@ -117,8 +138,7 @@ export async function main(canvas: HTMLCanvasElement) {
 		const pass = encoder.beginRenderPass(renderPassDescriptor)
 		pass.setPipeline(pipeline)
 		pass.setBindGroup(0, bindGroup)
-		pass.setBindGroup(1, bindGroup1)
-		pass.draw(3)
+		pass.draw(3, kNumObjects)
 		pass.end()
 
 		const commandBuffer = encoder.finish()
