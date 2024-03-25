@@ -1,7 +1,7 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import styles from './index.less'
-import {main} from './Demo'
+import {main} from './Demo/compute'
 
 /* eslint-disable */
 if ((module as any).hot) {
