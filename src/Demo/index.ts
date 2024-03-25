@@ -24,9 +24,9 @@ function createCircleVertices({
 	startAngle?: number
 	endAngle?: number
 }) {
-	const numVertices = numSubdivisions * 3 * 2
+	const numVertices = numSubdivisions * 2
 	//vertexData 中包含两个 float32的 position 和四个 uint8的 color。四个 uint8的 color 长度等于一个 float32
-	const vertexData = new Float32Array(numSubdivisions * 3 * 2 * (2 + 1))
+	const vertexData = new Float32Array(numVertices * (2 + 1))
 	//创建 vertexData 的 Uint8Array 视图，用于写入uint8类型的 color
 	const colorData = new Uint8Array(vertexData.buffer)
 	let offset = 0
@@ -45,37 +45,37 @@ function createCircleVertices({
 
 	// 2 vertices per subdivision
 	//
-	// 0--1 4
-	// | / /|
-	// |/ / |
-	// 2 3--5
+	// 0--1
+	// | /|
+	// |/ |
+	// 2--3
 	for (let i = 0; i < numSubdivisions; ++i) {
 		const angle1 = startAngle + ((i + 0) * (endAngle - startAngle)) / numSubdivisions
-		const angle2 = startAngle + ((i + 1) * (endAngle - startAngle)) / numSubdivisions
 
 		const c1 = Math.cos(angle1)
 		const s1 = Math.sin(angle1)
-		const c2 = Math.cos(angle2)
-		const s2 = Math.sin(angle2)
 
 		// first triangle
 		//@ts-ignore
 		addVertex(c1 * radius, s1 * radius, ...outerColor)
 		//@ts-ignore
-		addVertex(c2 * radius, s2 * radius, ...outerColor)
-		//@ts-ignore
 		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
-
-		// second triangle
-		//@ts-ignore
-		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
-		//@ts-ignore
-		addVertex(c2 * radius, s2 * radius, ...outerColor)
-		//@ts-ignore
-		addVertex(c2 * innerRadius, s2 * innerRadius, ...innerColor)
 	}
 
-	return {vertexData, numVertices}
+	const indexData = new Uint32Array(numSubdivisions * 6)
+	let ndx = 0
+	for (let i = 0; i < numSubdivisions; ++i) {
+		let offset = i * 2
+		indexData[ndx++] = offset
+		indexData[ndx++] = offset + 1
+		indexData[ndx++] = (offset + 2) % numVertices
+
+		indexData[ndx++] = (offset + 2) % numVertices
+		indexData[ndx++] = offset + 1
+		indexData[ndx++] = (offset + 3) % numVertices
+	}
+
+	return {vertexData, numVertices: indexData.length, indexData}
 }
 
 export async function main(canvas: HTMLCanvasElement) {
@@ -178,13 +178,23 @@ export async function main(canvas: HTMLCanvasElement) {
 	}
 	device.queue.writeBuffer(transformVertexBuffer, 0, transformVertexValue)
 
-	const {vertexData, numVertices} = createCircleVertices({radius: 0.5, innerRadius: 0.25, numSubdivisions: 32})
+	const {vertexData, numVertices, indexData} = createCircleVertices({
+		radius: 0.5,
+		innerRadius: 0.25,
+		numSubdivisions: 32
+	})
 	const vertexBuffer = device.createBuffer({
 		label: 'vertex buffer vertices',
 		size: vertexData.byteLength,
 		usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
 	})
 	device.queue.writeBuffer(vertexBuffer, 0, vertexData)
+	const indexBuffer = device.createBuffer({
+		label: 'index buffer',
+		size: indexData.byteLength,
+		usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
+	})
+	device.queue.writeBuffer(indexBuffer, 0, indexData)
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
 		label: 'our basic canvas renderPass',
@@ -209,7 +219,8 @@ export async function main(canvas: HTMLCanvasElement) {
 		pass.setPipeline(pipeline)
 		pass.setVertexBuffer(0, vertexBuffer)
 		pass.setVertexBuffer(1, transformVertexBuffer)
-		pass.draw(numVertices, kNumObjects)
+		pass.setIndexBuffer(indexBuffer, 'uint32')
+		pass.drawIndexed(numVertices, kNumObjects)
 		pass.end()
 
 		const commandBuffer = encoder.finish()
