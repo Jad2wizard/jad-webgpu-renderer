@@ -38,7 +38,8 @@ function createCircleVertices({
 		colorData[colorOffset++] = r * 255
 		colorData[colorOffset++] = g * 255
 		colorData[colorOffset++] = b * 255
-		colorOffset += 9 //跳过 color 最后一个alpha 分量以及 color 后面的 position
+		colorData[colorOffset++] = 0.1 * 255
+		colorOffset += 8 //跳过 color 最后一个alpha 分量以及 color 后面的 position
 	}
 	const innerColor = [0.9, 0.1, 0]
 	const outerColor = [0.5, 0.6, 0.1]
@@ -92,7 +93,10 @@ export async function main(canvas: HTMLCanvasElement) {
 	if (!ctx) return
 	ctx.configure({
 		device,
-		format: presentationFormat
+		format: presentationFormat,
+		//alphaMode设置为 premultiplied 之后，输出给 canvas 的颜色需要用alpha 值乘以 rgb，即 rgb 三个通道的值不能大于 alpha
+		//fs 中开发者需要手动用alpha 乘以 rgb
+		alphaMode: 'premultiplied'
 	})
 
 	const vsModule = device.createShaderModule({
@@ -126,7 +130,8 @@ export async function main(canvas: HTMLCanvasElement) {
 		label: 'triangle fragment shader with uniforms',
 		code: `
 			@fragment fn fs(@location(0) color: vec4f) -> @location(0) vec4f {
-				return color;
+				let alpha = color.a;
+				return vec4f(color.rgb * alpha, alpha);
 			}
 		`
 	})
@@ -159,7 +164,21 @@ export async function main(canvas: HTMLCanvasElement) {
 		fragment: {
 			module: fsModule,
 			entryPoint: 'fs',
-			targets: [{format: presentationFormat}]
+			targets: [
+				{
+					format: presentationFormat,
+					blend: {
+						color: {
+							srcFactor: 'one',
+							dstFactor: 'one-minus-src-alpha'
+						},
+						alpha: {
+							srcFactor: 'one',
+							dstFactor: 'one-minus-src-alpha'
+						}
+					}
+				}
+			]
 		}
 	})
 
@@ -201,7 +220,7 @@ export async function main(canvas: HTMLCanvasElement) {
 		colorAttachments: [
 			{
 				view: ctx.getCurrentTexture().createView(),
-				clearValue: [0.3, 0.3, 0.3, 1],
+				clearValue: [0.0, 0, 0, 0],
 				loadOp: 'clear',
 				storeOp: 'store'
 			}
