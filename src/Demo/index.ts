@@ -1,226 +1,101 @@
 /* eslint-disable no-undef */
 //code from webgpu-fundamentals
-function rand(min?: any, max?: any) {
-	if (min === undefined) {
-		min = 0
-		max = 1
-	} else if (max === undefined) {
-		max = min
-		min = 0
-	}
-	return min + Math.random() * (max - min)
-}
-
-function createCircleVertices({
-	radius = 1,
-	numSubdivisions = 24,
-	innerRadius = 0,
-	startAngle = 0,
-	endAngle = Math.PI * 2
-}: {
-	radius?: number
-	numSubdivisions?: number
-	innerRadius?: number
-	startAngle?: number
-	endAngle?: number
-}) {
-	const numVertices = numSubdivisions * 2
-	//vertexData 中包含两个 float32的 position 和四个 uint8的 color。四个 uint8的 color 长度等于一个 float32
-	const vertexData = new Float32Array(numVertices * (2 + 1))
-	//创建 vertexData 的 Uint8Array 视图，用于写入uint8类型的 color
-	const colorData = new Uint8Array(vertexData.buffer)
-	let offset = 0
-	let colorOffset = 8 //color 前面有两个 float32组成的 position，两个 float32长度等于8个 uint8
-	const addVertex = (x: number, y: number, r: number, g: number, b: number) => {
-		vertexData[offset++] = x
-		vertexData[offset++] = y
-		offset++ //跳过 position 后面的四个 uint8 组成的 color
-		colorData[colorOffset++] = r * 255
-		colorData[colorOffset++] = g * 255
-		colorData[colorOffset++] = b * 255
-		colorData[colorOffset++] = 0.1 * 255
-		colorOffset += 8 //跳过 color 最后一个alpha 分量以及 color 后面的 position
-	}
-	const innerColor = [0.9, 0.1, 0]
-	const outerColor = [0.5, 0.6, 0.1]
-
-	// 2 vertices per subdivision
-	//
-	// 0--1
-	// | /|
-	// |/ |
-	// 2--3
-	for (let i = 0; i < numSubdivisions; ++i) {
-		const angle1 = startAngle + ((i + 0) * (endAngle - startAngle)) / numSubdivisions
-
-		const c1 = Math.cos(angle1)
-		const s1 = Math.sin(angle1)
-
-		// first triangle
-		//@ts-ignore
-		addVertex(c1 * radius, s1 * radius, ...outerColor)
-		//@ts-ignore
-		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
-	}
-
-	const indexData = new Uint32Array(numSubdivisions * 6)
-	let ndx = 0
-	for (let i = 0; i < numSubdivisions; ++i) {
-		let offset = i * 2
-		indexData[ndx++] = offset
-		indexData[ndx++] = offset + 1
-		indexData[ndx++] = (offset + 2) % numVertices
-
-		indexData[ndx++] = (offset + 2) % numVertices
-		indexData[ndx++] = offset + 1
-		indexData[ndx++] = (offset + 3) % numVertices
-	}
-
-	return {vertexData, numVertices: indexData.length, indexData}
-}
-
+import {makeShaderDataDefinitions} from 'webgpu-utils'
 export async function main(canvas: HTMLCanvasElement) {
 	const adapter = await navigator.gpu?.requestAdapter()
 	const device = await adapter?.requestDevice()
 	if (!device) {
 		throw 'need a browser that supports WebGPU'
 	}
-	//@ts-ignore
-	window.device = device
 
 	const presentationFormat = navigator.gpu.getPreferredCanvasFormat()
 	const ctx = canvas.getContext('webgpu')
 	if (!ctx) return
 	ctx.configure({
 		device,
-		format: presentationFormat,
-		//alphaMode设置为 premultiplied 之后，输出给 canvas 的颜色需要用alpha 值乘以 rgb，即 rgb 三个通道的值不能大于 alpha
-		//fs 中开发者需要手动用alpha 乘以 rgb
-		alphaMode: 'premultiplied'
+		format: presentationFormat
 	})
 
-	const vsModule = device.createShaderModule({
+	const code = `
+		struct UniformStruct {
+			scale: vec2f,
+			offset: vec2f
+		};
+
+		@group(0) @binding(0) var<uniform> transform: UniformStruct;
+		@group(1) @binding(0) var<uniform> color: vec4f;
+
+		@vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
+			let pos = array(
+				vec2f(0.0, 0.3),
+				vec2f(-0.3, -0.3),
+				vec2f(0.3, -0.3)
+			);
+
+			//如果vs 中不使用 transform 变量的话，程序会报 bindGroupLayout entries数量不匹配的问题
+			//应该是着色器代码做了tree-shake 之类的优化，将没有使用的 transform 变量的定义去掉了，
+			//导致 pipeline 自动生成 bindGroupLayout 中吧 transform 对应的 binding 去掉了
+			return vec4f(pos[vi] * transform.scale + transform.offset, 0, 1);
+		}
+
+		@fragment fn fs() -> @location(0) vec4f {
+			return color;
+		}
+	`
+	const module = device.createShaderModule({
 		label: 'triangle vertex shader with uniforms',
-		code: `
-			struct Output {
-				@builtin(position) position: vec4f,
-				@location(0) color: vec4f
-			}
-
-			struct Input{
-				@location(0) position: vec2f,
-				@location(1) scale: vec2f,
-				@location(2) offset: vec2f,
-				@location(3) color: vec4f
-			}
-
-			@vertex fn vs(
-				vert: Input,
-			) -> Output {
-				var output: Output;
-				output.position = vec4f(vert.position * vert.scale + vert.offset, 0, 1);
-				output.color = vert.color;
-
-				return output;
-			}
-		`
+		code
 	})
 
-	const fsModule = device.createShaderModule({
-		label: 'triangle fragment shader with uniforms',
-		code: `
-			@fragment fn fs(@location(0) color: vec4f) -> @location(0) vec4f {
-				let alpha = color.a;
-				return vec4f(color.rgb * alpha, alpha);
-			}
-		`
-	})
+	console.log(makeShaderDataDefinitions(code))
 
 	const pipeline = device.createRenderPipeline({
 		label: 'triangle with uniforms',
 		layout: 'auto',
 		vertex: {
-			module: vsModule,
-			entryPoint: 'vs',
-			buffers: [
-				{
-					arrayStride: 2 * 4 + 4,
-					attributes: [
-						{shaderLocation: 0, offset: 0, format: 'float32x2'},
-						{shaderLocation: 3, offset: 4 * 2, format: 'unorm8x4'}
-					]
-				},
-				{
-					//transform
-					arrayStride: (2 + 2) * 4,
-					stepMode: 'instance',
-					attributes: [
-						{shaderLocation: 1, offset: 0, format: 'float32x2'},
-						{shaderLocation: 2, offset: 2 * 4, format: 'float32x2'}
-					]
-				}
-			]
+			module,
+			entryPoint: 'vs'
 		},
 		fragment: {
-			module: fsModule,
+			module,
 			entryPoint: 'fs',
-			targets: [
-				{
-					format: presentationFormat,
-					blend: {
-						color: {
-							srcFactor: 'one',
-							dstFactor: 'one-minus-src-alpha'
-						},
-						alpha: {
-							srcFactor: 'one',
-							dstFactor: 'one-minus-src-alpha'
-						}
-					}
-				}
-			]
+			targets: [{format: presentationFormat}]
 		}
 	})
 
-	const kNumObjects = 100
-	const transformVertexBuffer = device.createBuffer({
-		label: 'transform vertex buffer',
-		size: kNumObjects * (2 + 2) * 4,
-		usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+	const transformUniformValues = new Float32Array(2 + 2)
+	const colorUniformValue = new Float32Array(4)
+	transformUniformValues.set([0.5, 0.5, 0.3, 0.0])
+	colorUniformValue.set([0, 1, 0, 1])
+
+	const transformUniformBuffer = device.createBuffer({
+		size: transformUniformValues.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 	})
 
-	const transformVertexValue = new Float32Array(transformVertexBuffer.size / 4)
-	const aspect = canvas.width / canvas.height
-	for (let i = 0; i < kNumObjects; ++i) {
-		const scale = rand(0.3)
-		transformVertexValue.set([scale / aspect, scale, rand(-0.9, 0.9), rand(-0.9, 0.9)], i * 4)
-	}
-	device.queue.writeBuffer(transformVertexBuffer, 0, transformVertexValue)
+	const colorUniformBuffer = device.createBuffer({
+		size: colorUniformValue.byteLength,
+		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+	})
 
-	const {vertexData, numVertices, indexData} = createCircleVertices({
-		radius: 0.5,
-		innerRadius: 0.25,
-		numSubdivisions: 32
+	//对应vs 里的@group(0) @binding(0)
+	const bindGroup = device.createBindGroup({
+		layout: pipeline.getBindGroupLayout(0),
+		entries: [{binding: 0, resource: {buffer: transformUniformBuffer}}]
 	})
-	const vertexBuffer = device.createBuffer({
-		label: 'vertex buffer vertices',
-		size: vertexData.byteLength,
-		usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+
+	//对应 fs 里的@group(1) @binding(0)
+	const bindGroup1 = device.createBindGroup({
+		layout: pipeline.getBindGroupLayout(1),
+		entries: [{binding: 0, resource: {buffer: colorUniformBuffer}}]
 	})
-	device.queue.writeBuffer(vertexBuffer, 0, vertexData)
-	const indexBuffer = device.createBuffer({
-		label: 'index buffer',
-		size: indexData.byteLength,
-		usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
-	})
-	device.queue.writeBuffer(indexBuffer, 0, indexData)
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
 		label: 'our basic canvas renderPass',
 		colorAttachments: [
 			{
 				view: ctx.getCurrentTexture().createView(),
-				clearValue: [0.0, 0, 0, 0],
+				clearValue: [0.3, 0.3, 0.3, 1],
 				loadOp: 'clear',
 				storeOp: 'store'
 			}
@@ -230,16 +105,18 @@ export async function main(canvas: HTMLCanvasElement) {
 	function render() {
 		if (!device || !ctx) return
 
+		device.queue.writeBuffer(transformUniformBuffer, 0, transformUniformValues)
+		device.queue.writeBuffer(colorUniformBuffer, 0, colorUniformValue)
+
 		//@ts-ignore
 		renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView()
 		const encoder = device.createCommandEncoder({label: 'our encoder'})
 
 		const pass = encoder.beginRenderPass(renderPassDescriptor)
 		pass.setPipeline(pipeline)
-		pass.setVertexBuffer(0, vertexBuffer)
-		pass.setVertexBuffer(1, transformVertexBuffer)
-		pass.setIndexBuffer(indexBuffer, 'uint32')
-		pass.drawIndexed(numVertices, kNumObjects)
+		pass.setBindGroup(0, bindGroup)
+		pass.setBindGroup(1, bindGroup1)
+		pass.draw(3)
 		pass.end()
 
 		const commandBuffer = encoder.finish()

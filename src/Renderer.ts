@@ -1,5 +1,5 @@
 import {OrthographicCamera, PerspectiveCamera} from 'three'
-import {Scene} from '../Scene'
+import Scene from './Scene'
 
 type IProps = {
 	canvas: HTMLCanvasElement
@@ -12,6 +12,14 @@ class Renderer {
 	constructor(props: IProps) {
 		this.outputCanvas = props.canvas
 		this.initWebGPU()
+	}
+
+	get width() {
+		return this.outputCanvas.width
+	}
+
+	get height() {
+		return this.outputCanvas.height
 	}
 
 	/**
@@ -36,7 +44,8 @@ class Renderer {
 		const presentationFormat = navigator.gpu.getPreferredCanvasFormat()
 		context?.configure({
 			device,
-			format: presentationFormat
+			format: presentationFormat,
+			alphaMode: 'premultiplied'
 		})
 	}
 }

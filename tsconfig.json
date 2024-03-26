@@ -15,7 +15,8 @@
 		"baseUrl": ".",
 		"paths": {
 			"three-examples/*": ["node_modules/three/examples/*"],
-			"utils": ["src/webgl/utils"]
+			"@/*": ["src/*"],
+			"localType": ["src/types.ts"]
 		}
 	},
 	"include": ["./src/**/*"],
