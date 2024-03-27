@@ -1,6 +1,8 @@
 /* eslint-disable no-undef */
 //code from webgpu-fundamentals
-import {makeShaderDataDefinitions} from 'webgpu-utils'
+import {Matrix3, Matrix4} from 'three'
+import {makeShaderDataDefinitions, makeStructuredView} from 'webgpu-utils'
+
 export async function main(canvas: HTMLCanvasElement) {
 	const adapter = await navigator.gpu?.requestAdapter()
 	const device = await adapter?.requestDevice()
@@ -17,13 +19,25 @@ export async function main(canvas: HTMLCanvasElement) {
 	})
 
 	const code = `
+		struct A {
+			a: f32,
+			b: vec4f
+		};
 		struct UniformStruct {
+			projectionMatrix: mat4x4<f32>,
 			scale: vec2f,
-			offset: vec2f
+			offset: vec2f,
 		};
 
 		@group(0) @binding(0) var<uniform> transform: UniformStruct;
 		@group(1) @binding(0) var<uniform> color: vec4f;
+
+		struct Input{
+			@location(0) position: vec2f,
+			@location(1) scale: vec2f,
+			@location(2) offset: vec2f,
+			@location(3) color: vec4f
+		}
 
 		@vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
 			let pos = array(
@@ -32,10 +46,8 @@ export async function main(canvas: HTMLCanvasElement) {
 				vec2f(0.3, -0.3)
 			);
 
-			//如果vs 中不使用 transform 变量的话，程序会报 bindGroupLayout entries数量不匹配的问题
-			//应该是着色器代码做了tree-shake 之类的优化，将没有使用的 transform 变量的定义去掉了，
-			//导致 pipeline 自动生成 bindGroupLayout 中吧 transform 对应的 binding 去掉了
-			return vec4f(pos[vi] * transform.scale + transform.offset, 0, 1);
+			let p = vec4f(pos[vi] * transform.scale + transform.offset, 0, 1);
+			return transform.projectionMatrix * p;
 		}
 
 		@fragment fn fs() -> @location(0) vec4f {
@@ -47,7 +59,19 @@ export async function main(canvas: HTMLCanvasElement) {
 		code
 	})
 
-	console.log(makeShaderDataDefinitions(code))
+	const projectionMat = new Matrix4()
+	projectionMat.set(1, 0, 0, 0.5, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+
+	const defs = makeShaderDataDefinitions(code)
+	console.log(defs)
+	const transformValues = makeStructuredView(defs.uniforms.transform)
+	transformValues.set({
+		projectionMatrix: projectionMat.elements,
+		offset: [0, 0],
+		scale: [1, 1]
+	})
+	const colorValues = makeStructuredView(defs.uniforms.color)
+	colorValues.set([0.1, 0.9, 0.89, 1])
 
 	const pipeline = device.createRenderPipeline({
 		label: 'triangle with uniforms',
@@ -63,18 +87,18 @@ export async function main(canvas: HTMLCanvasElement) {
 		}
 	})
 
-	const transformUniformValues = new Float32Array(2 + 2)
-	const colorUniformValue = new Float32Array(4)
-	transformUniformValues.set([0.5, 0.5, 0.3, 0.0])
-	colorUniformValue.set([0, 1, 0, 1])
+	//const transformUniformValues = new Float32Array(2 + 2)
+	//const colorUniformValue = new Float32Array(4)
+	//transformUniformValues.set([0.5, 0.5, 0.3, 0.0])
+	//colorUniformValue.set([0, 1, 0, 1])
 
 	const transformUniformBuffer = device.createBuffer({
-		size: transformUniformValues.byteLength,
+		size: transformValues.arrayBuffer.byteLength, // transformUniformValues.byteLength,
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 	})
 
 	const colorUniformBuffer = device.createBuffer({
-		size: colorUniformValue.byteLength,
+		size: colorValues.arrayBuffer.byteLength,
 		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 	})
 
@@ -102,11 +126,15 @@ export async function main(canvas: HTMLCanvasElement) {
 		]
 	}
 
+	const m3 = new Matrix3()
+	m3.set(1, 2, 3, 4, 5, 6, 7, 8, 9)
+	console.log(m3)
+
 	function render() {
 		if (!device || !ctx) return
 
-		device.queue.writeBuffer(transformUniformBuffer, 0, transformUniformValues)
-		device.queue.writeBuffer(colorUniformBuffer, 0, colorUniformValue)
+		device.queue.writeBuffer(transformUniformBuffer, 0, transformValues.arrayBuffer)
+		device.queue.writeBuffer(colorUniformBuffer, 0, colorValues.arrayBuffer)
 
 		//@ts-ignore
 		renderPassDescriptor.colorAttachments[0].view = ctx.getCurrentTexture().createView()

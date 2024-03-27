@@ -3,15 +3,33 @@ import Scene from './Scene'
 
 type IProps = {
 	canvas: HTMLCanvasElement
+	clearColor?: [number, number, number, number]
 }
 
 class Renderer {
 	private outputCanvas: HTMLCanvasElement
 	private device: GPUDevice
+	private canvasCtx: GPUCanvasContext | null
+	private renderPassDescriptor: GPURenderPassDescriptor
 
 	constructor(props: IProps) {
 		this.outputCanvas = props.canvas
+		this.canvasCtx = this.outputCanvas.getContext('webgpu') || null
+		if (!this.canvasCtx) {
+			throw 'your browser not supports WebGPU'
+		}
 		this.initWebGPU()
+		this.renderPassDescriptor = {
+			label: 'render pass',
+			colorAttachments: [
+				{
+					view: this.canvasCtx.getCurrentTexture().createView(),
+					clearValue: props.clearColor ? props.clearColor.slice() : [0, 0, 0, 0],
+					loadOp: 'clear',
+					storeOp: 'store'
+				}
+			]
+		}
 	}
 
 	get width() {
@@ -29,7 +47,17 @@ class Renderer {
 	 * @param camera
 	 * @param scene
 	 */
-	public render(camera: PerspectiveCamera | OrthographicCamera, scene: Scene) {}
+	public render(camera: PerspectiveCamera | OrthographicCamera, scene: Scene) {
+		if (!this.device || !this.canvasCtx) return
+		const {device, canvasCtx, renderPassDescriptor} = this
+		const projectionMat = camera.projectionMatrix
+		const viewMat = camera.matrixWorldInverse
+
+		//@ts-ignore
+		renderPassDescriptor.colorAttachments[0].view = canvasCtx.getCurrentTexture().createView()
+		const encoder = device.createCommandEncoder()
+		const pass = encoder.beginRenderPass(renderPassDescriptor)
+	}
 
 	public resize(width: number, height: number) {}
 
@@ -40,12 +68,14 @@ class Renderer {
 			throw 'your browser not supports WebGPU'
 		}
 		this.device = device
-		const context = this.outputCanvas.getContext('webgpu')
+		if (!this.canvasCtx) {
+			throw 'your browser not supports WebGPU'
+		}
 		const presentationFormat = navigator.gpu.getPreferredCanvasFormat()
-		context?.configure({
+		this.canvasCtx.configure({
 			device,
-			format: presentationFormat,
-			alphaMode: 'premultiplied'
+			format: presentationFormat
+			//alphaMode: 'premultiplied'
 		})
 	}
 }

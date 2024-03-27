@@ -1,16 +1,26 @@
 /* eslint-disable no-undef */
 import {TypedArray} from 'localType'
 
+type Options = {
+	shaderLocation?: number
+}
+
 class Attribute {
 	private _array: TypedArray
 	private _itemSize: number
 	private _version = 0
 	private _buffer: GPUBuffer | null
+	private _shaderLocation?: number
 
-	constructor(data: TypedArray, itemSize: number) {
+	constructor(data: TypedArray, itemSize: number, options?: Options) {
 		this._array = data
 		this._itemSize = itemSize
 		this._buffer = null
+		this._shaderLocation = options?.shaderLocation
+	}
+
+	get shaderLocation() {
+		return this._shaderLocation
 	}
 
 	public needsUpdate() {
@@ -55,7 +65,9 @@ class Attribute {
 	}
 
 	public getFormat() {
-		return this._array.constructor.name.split('Array')[0].toLocaleLowerCase() as GPUVertexFormat
+		let typeStr = this._array.constructor.name.split('Array')[0].toLocaleLowerCase() //Float32, Uint8, Int8, ...
+		if (typeStr.startsWith('int')) typeStr = 's' + typeStr
+		return (typeStr.toLocaleLowerCase() + `x${this.itemSize}`) as GPUVertexFormat
 	}
 
 	public dispose() {

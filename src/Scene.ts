@@ -11,6 +11,17 @@ class Scene extends Object3D {
 	get modelList() {
 		return this._modelList
 	}
+
+	public addModel(model: Model) {
+		if (!this._modelList.includes(model)) this._modelList.push(model)
+	}
+
+	public removeModel(model: Model) {
+		const index = this._modelList.indexOf(model)
+		if (index > -1) {
+			this._modelList.splice(index, 1)
+		}
+	}
 }
 
 export default Scene

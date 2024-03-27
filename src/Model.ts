@@ -2,11 +2,15 @@ import {Object3D} from './Object3D'
 import Geometry from './geometry/geometry'
 import Material from './material/material'
 
+type Options = {
+	id?: string
+}
+
 class Model extends Object3D {
 	private _geometry: Geometry
 	private _material: Material
 
-	constructor(geometry: Geometry, material: Material) {
+	constructor(geometry: Geometry, material: Material, opts?: Options) {
 		super()
 		this._geometry = geometry
 		this._material = material

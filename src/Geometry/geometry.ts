@@ -29,14 +29,21 @@ class Geometry {
 	public getAttributeBufferLayouts() {
 		const vertexBufferLayouts: GPUVertexBufferLayout[] = []
 		let location = 0
+		const existedShaderLocations = this.attributeList
+			.map(item => item.attribute.shaderLocation)
+			.filter(l => l !== undefined)
+			.sort()
 		for (let item of this.attributeList) {
 			const {attribute, name} = item
-			const {itemSize, array} = attribute
+			const {itemSize, array, shaderLocation} = attribute
+			while (existedShaderLocations.includes(location)) {
+				location++
+			}
 			const bufferLayout: GPUVertexBufferLayout = {
 				arrayStride: itemSize * array.BYTES_PER_ELEMENT,
 				attributes: [
 					{
-						shaderLocation: location++,
+						shaderLocation: shaderLocation === undefined ? location++ : shaderLocation,
 						offset: 0,
 						format: attribute.getFormat()
 					}
@@ -52,6 +59,7 @@ class Geometry {
 			const {attribute, name, version} = item
 			if (version !== attribute.version || !attribute.buffer) {
 				attribute.updateBuffer(device, name)
+				item.version = attribute.version
 			}
 			bufferList.push(attribute.buffer as GPUBuffer)
 		}
