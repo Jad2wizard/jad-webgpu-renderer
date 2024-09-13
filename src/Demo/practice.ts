@@ -15,8 +15,8 @@ async function renderPass() {
 	const device = await checkWebGPU()
 
 	const canvas = document.querySelector('#canvas') as HTMLCanvasElement
-	// canvas.width = canvas.offsetWidth
-	// canvas.height = canvas.offsetHeight
+	canvas.width = canvas.offsetWidth
+	canvas.height = canvas.offsetHeight
 	const presentationFormat = navigator.gpu?.getPreferredCanvasFormat()
 	const context = canvas.getContext('webgpu')
 	if (!context) {
@@ -29,27 +29,55 @@ async function renderPass() {
 	})
 
 	const shaderModule = device.createShaderModule({
-		label: 'our hardcoded red triangle shaders',
+		label: 'our hardcoded checkerboard triangle shaders',
 		code: `
+            //定义一个结构体用以组织所有 inter-stage 变量
+            struct VSOutput {
+                //@builtin(position)并不是 inter-stage 变量，其在 vs 和 fs 中的含义不同
+                @builtin(position) position: vec4f,
+                //同一个 inter-stage 变量在 fs 和 vs 之间通过 location 标识相互联系
+                @location(0) color: vec4f
+            };
+
             @vertex fn vs(
                 @builtin(vertex_index) vi: u32
-            ) -> @builtin(position) vec4f {
+            ) -> VSOutput {
                 let pos = array(
                     vec2f(0.0, 0.5),
                     vec2f(-0.5, -0.5),
                     vec2f(0.5, -0.5)
                 );
-                return vec4f(pos[vi], 0.0, 1.0);
+                
+                var color = array<vec4f, 3>(
+                    vec4f(1, 0, 0, 1),
+                    vec4f(0, 1, 0, 1),
+                    vec4f(0, 0, 1, 1),
+                );
+
+                var vsOutput: VSOutput;
+                vsOutput.position = vec4f(pos[vi], 0.0, 1.0);
+                vsOutput.color = color[vi];
+
+                return vsOutput;
             }
             
-            @fragment fn fs() -> @location(1) vec4f {
-                return vec4f(1.0, 0.0, 0.0, 1.0);
+            //fsInput.position和 vs 输出的 position 不一样，fsInput.position取值范围是0到 resolution
+            @fragment fn fs(fsInput: VSOutput) -> @location(1) vec4f {
+                // return fsInput.color;
+                let red = vec4f(1, 0, 0, 1);
+                let cyan = vec4f(0, 1, 1, 1);
+
+                let grid = vec2u(fsInput.position.xy) / 16;
+                let checker = (grid.x + grid.y) % 2 == 1;
+
+                //select方法第三个参数为 true 时返回第二个参数
+                return select(red, cyan, checker);
             }
         `,
 	})
 
 	const pipeline = device.createRenderPipeline({
-		label: 'our hardcoded red triangle pipeline',
+		label: 'our hardcoded checkerboard triangle pipeline',
 		layout: 'auto',
 		vertex: {
 			entryPoint: 'vs',
@@ -119,8 +147,11 @@ async function renderPass() {
 				width: entry.contentBoxSize[0].inlineSize,
 				height: entry.contentBoxSize[0].blockSize,
 			})
+			render()
 		}
 	})
+
+	observer.observe(canvas)
 
 	render()
 }
