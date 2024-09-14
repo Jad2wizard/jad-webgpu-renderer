@@ -1,3 +1,16 @@
+import { makeShaderDataDefinitions, makeStructuredView } from 'webgpu-utils'
+
+const rand = (min?: number, max?: number) => {
+	if (min === undefined) {
+		min = 0
+		max = 1
+	} else if (max === undefined) {
+		max = min
+		min = 0
+	}
+	return min + Math.random() * (max - min)
+}
+
 async function checkWebGPU() {
 	const adapter = await navigator.gpu?.requestAdapter()
 	const device = await adapter?.requestDevice()
@@ -9,7 +22,7 @@ async function checkWebGPU() {
 	return device
 }
 
-const { STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
+const { UNIFORM, STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
 
 async function renderPass() {
 	const device = await checkWebGPU()
@@ -28,56 +41,42 @@ async function renderPass() {
 		format: presentationFormat,
 	})
 
-	const shaderModule = device.createShaderModule({
-		label: 'our hardcoded checkerboard triangle shaders',
-		code: `
-            //定义一个结构体用以组织所有 inter-stage 变量
-            struct VSOutput {
-                //@builtin(position)并不是 inter-stage 变量，其在 vs 和 fs 中的含义不同
-                @builtin(position) position: vec4f,
-                //同一个 inter-stage 变量在 fs 和 vs 之间通过 location 标识相互联系
-                @location(0) color: vec4f
+	const shaderCode = `
+            struct OurStruct {
+                color: vec4f,
+                offset: vec2f
             };
+            struct DynamicUniform {
+                scale: vec2f
+            };
+
+            @group(0) @binding(0) var<uniform> ourStruct: OurStruct;
+            @group(0) @binding(1) var<uniform> dynamicUniforms: DynamicUniform;
 
             @vertex fn vs(
                 @builtin(vertex_index) vi: u32
-            ) -> VSOutput {
+            ) -> @builtin(position) vec4f {
                 let pos = array(
                     vec2f(0.0, 0.5),
                     vec2f(-0.5, -0.5),
                     vec2f(0.5, -0.5)
                 );
                 
-                var color = array<vec4f, 3>(
-                    vec4f(1, 0, 0, 1),
-                    vec4f(0, 1, 0, 1),
-                    vec4f(0, 0, 1, 1),
-                );
-
-                var vsOutput: VSOutput;
-                vsOutput.position = vec4f(pos[vi], 0.0, 1.0);
-                vsOutput.color = color[vi];
-
-                return vsOutput;
+                return vec4f(pos[vi] * dynamicUniforms.scale + ourStruct.offset, 0, 1);
             }
             
-            //fsInput.position和 vs 输出的 position 不一样，fsInput.position取值范围是0到 resolution
-            @fragment fn fs(fsInput: VSOutput) -> @location(1) vec4f {
-                // return fsInput.color;
-                let red = vec4f(1, 0, 0, 1);
-                let cyan = vec4f(0, 1, 1, 1);
-
-                let grid = vec2u(fsInput.position.xy) / 16;
-                let checker = (grid.x + grid.y) % 2 == 1;
-
-                //select方法第三个参数为 true 时返回第二个参数
-                return select(red, cyan, checker);
+            @fragment fn fs() -> @location(1) vec4f {
+                return ourStruct.color;
             }
-        `,
+    `
+
+	const shaderModule = device.createShaderModule({
+		label: 'triangle shaders with uniforms',
+		code: shaderCode,
 	})
 
 	const pipeline = device.createRenderPipeline({
-		label: 'our hardcoded checkerboard triangle pipeline',
+		label: 'triangle with uniforms',
 		layout: 'auto',
 		vertex: {
 			entryPoint: 'vs',
@@ -89,6 +88,55 @@ async function renderPass() {
 			targets: [null, { format: presentationFormat }],
 		},
 	})
+
+	const defs = makeShaderDataDefinitions(shaderCode)
+	const kNumObjects = 100
+	const objectInfos: any[] = []
+
+	for (let i = 0; i < kNumObjects; ++i) {
+		const uniformValues = makeStructuredView(defs.uniforms.dynamicUniforms)
+		const staticUniformValues = makeStructuredView(defs.uniforms.ourStruct)
+		uniformValues.set({ scale: [1, 1] })
+		staticUniformValues.set({
+			color: [rand(), rand(), rand(), 1],
+			offset: [rand(-0.9, 0.9), rand(-0.9, 0.9)],
+		})
+		const staticUniformBuffer = device.createBuffer({
+			label: `static uniforms for obj: ${i}`,
+			size: staticUniformValues.arrayBuffer.byteLength,
+			usage: UNIFORM | COPY_DST,
+		})
+
+		device.queue.writeBuffer(staticUniformBuffer, 0, staticUniformValues.arrayBuffer)
+
+		const uniformBuffer = device.createBuffer({
+			label: `uniforms for obj: ${i}`,
+			size: uniformValues.arrayBuffer.byteLength,
+			usage: UNIFORM | COPY_DST,
+		})
+
+		const bindGroup = device.createBindGroup({
+			label: `bind group for obj: ${i}`,
+			layout: pipeline.getBindGroupLayout(0),
+			entries: [
+				{
+					binding: 0,
+					resource: { buffer: staticUniformBuffer },
+				},
+				{
+					binding: 1,
+					resource: { buffer: uniformBuffer },
+				},
+			],
+		})
+
+		objectInfos.push({
+			scale: rand(0.2, 0.5),
+			uniformBuffer,
+			uniformValues,
+			bindGroup,
+		})
+	}
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
 		label: 'our basic canvas renderPass',
@@ -121,20 +169,28 @@ async function renderPass() {
 
 	function render() {
 		if (!context || !device) return
+
 		resizeCanvasToDisplaySize(canvas)
 		;(renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[1].view = context
 			.getCurrentTexture()
 			.createView()
 
 		const encoder = device.createCommandEncoder({ label: 'our encoder' })
-
 		//通过特定的 renderPass 而不是直接通过 commandEncoder 来录制渲染命令，
 		//主要是为了提供更高效的资源管理、特定于渲染的优化、更清晰的 API 设计、支持并行执行和延迟提交，
 		//以及提供专门处理不同任务的 Pass 类型。renderPass 的抽象使得开发者能够更方便地使用 GPU 进行渲染任务，
 		//并且使得 WebGPU 可以在后台进行更高效的性能优化。
 		const pass = encoder.beginRenderPass(renderPassDescriptor)
 		pass.setPipeline(pipeline) //renderPass调用的方法不会直接执行，而是录制在 command buffer中，直接提交到 GPU 后才会执行
-		pass.draw(3)
+
+		const aspect = canvas.width / canvas.height
+		for (const { scale, bindGroup, uniformValues, uniformBuffer } of objectInfos) {
+			uniformValues.set({ scale: [scale / aspect, scale] })
+			device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer)
+			pass.setBindGroup(0, bindGroup)
+			pass.draw(3)
+		}
+
 		pass.end()
 
 		const commandBuffer = encoder.finish()
