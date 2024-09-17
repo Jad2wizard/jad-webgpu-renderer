@@ -1,5 +1,16 @@
 import { makeShaderDataDefinitions, makeStructuredView } from 'webgpu-utils'
 
+async function checkWebGPU() {
+	const adapter = await navigator.gpu?.requestAdapter()
+	const device = await adapter?.requestDevice()
+	if (!device) {
+		throw 'need a browser that supports webgpu'
+	}
+	//@ts-ignore
+	window.d = device
+	return device
+}
+
 const rand = (min?: number, max?: number) => {
 	if (min === undefined) {
 		min = 0
@@ -11,15 +22,44 @@ const rand = (min?: number, max?: number) => {
 	return min + Math.random() * (max - min)
 }
 
-async function checkWebGPU() {
-	const adapter = await navigator.gpu?.requestAdapter()
-	const device = await adapter?.requestDevice()
-	if (!device) {
-		throw 'need a browser that supports webgpu'
+function createCircleVertices({
+	radius = 1,
+	numSubdivisions = 24,
+	innerRadius = 0,
+	startAngle = 0,
+	endAngle = Math.PI * 2,
+} = {}) {
+	const numVertices = numSubdivisions * 3 * 2
+	const vertexData = new Float32Array(numVertices * 2)
+
+	let offset = 0
+	const addVertex = (x: number, y: number) => {
+		vertexData[offset++] = x
+		vertexData[offset++] = y
 	}
-	//@ts-ignore
-	window.d = device
-	return device
+
+	for (let i = 0; i < numSubdivisions; ++i) {
+		const angle1 = startAngle + ((i + 0) * (endAngle - startAngle)) / numSubdivisions
+		const angle2 = startAngle + ((i + 1) * (endAngle - startAngle)) / numSubdivisions
+
+		const c1 = Math.cos(angle1)
+		const s1 = Math.sin(angle1)
+		const c2 = Math.cos(angle2)
+		const s2 = Math.sin(angle2)
+
+		addVertex(c1 * radius, s1 * radius)
+		addVertex(c2 * radius, s2 * radius)
+		addVertex(c1 * innerRadius, s1 * innerRadius)
+
+		addVertex(c1 * innerRadius, s1 * innerRadius)
+		addVertex(c2 * radius, s2 * radius)
+		addVertex(c2 * innerRadius, s2 * innerRadius)
+	}
+
+	return {
+		vertexData,
+		numVertices,
+	}
 }
 
 const { UNIFORM, STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
@@ -42,31 +82,43 @@ async function renderPass() {
 	})
 
 	const shaderCode = `
-            struct OurStruct {
+            struct Uniform {
                 color: vec4f,
-                offset: vec2f
+                offset: vec2f,
             };
             struct DynamicUniform {
-                scale: vec2f
+                scale: vec2f,
             };
 
-            @group(0) @binding(0) var<uniform> ourStruct: OurStruct;
-            @group(0) @binding(1) var<uniform> dynamicUniforms: DynamicUniform;
+			struct Vertex {
+				position: vec2f,
+			};
+
+			struct VSOut {
+				@builtin(position) position: vec4f,
+				@location(0) color: vec4f
+			};
+
+            @group(0) @binding(0) var<storage, read> uniforms: array<Uniform>;
+            @group(0) @binding(1) var<storage, read> dynamicUniforms: array<DynamicUniform>;
+			@group(0) @binding(2) var<storage, read> pos: array<Vertex>;
 
             @vertex fn vs(
-                @builtin(vertex_index) vi: u32
-            ) -> @builtin(position) vec4f {
-                let pos = array(
-                    vec2f(0.0, 0.5),
-                    vec2f(-0.5, -0.5),
-                    vec2f(0.5, -0.5)
-                );
+                @builtin(vertex_index) vi: u32,
+				@builtin(instance_index) ii: u32
+            ) -> VSOut {
+				let staticUniform = uniforms[ii];
+				let dynamicUniform = dynamicUniforms[ii];
+
+				var output: VSOut;
                 
-                return vec4f(pos[vi] * dynamicUniforms.scale + ourStruct.offset, 0, 1);
+                output.position = vec4f(pos[vi].position * dynamicUniform.scale + staticUniform.offset, 0, 1);
+				output.color = staticUniform.color;
+				return output;
             }
             
-            @fragment fn fs() -> @location(1) vec4f {
-                return ourStruct.color;
+            @fragment fn fs(@location(0) color: vec4f) -> @location(1) vec4f {
+                return color;
             }
     `
 
@@ -76,7 +128,7 @@ async function renderPass() {
 	})
 
 	const pipeline = device.createRenderPipeline({
-		label: 'triangle with uniforms',
+		label: 'storage buffer like uniform',
 		layout: 'auto',
 		vertex: {
 			entryPoint: 'vs',
@@ -92,51 +144,56 @@ async function renderPass() {
 	const defs = makeShaderDataDefinitions(shaderCode)
 	const kNumObjects = 100
 	const objectInfos: any[] = []
+	//@ts-ignore
+	const staticUnitSize = defs.storages.uniforms.typeDefinition.elementType.size
+	//@ts-ignore
+	const dynamicUnitSize = defs.storages.dynamicUniforms.typeDefinition.elementType.size
 
+	const staticStorageBuffer = device.createBuffer({
+		label: `static storage for objects`,
+		size: staticUnitSize * kNumObjects,
+		usage: STORAGE | COPY_DST,
+	})
+	const dynamicStorageBuffer = device.createBuffer({
+		label: 'dynamic storage for objects',
+		size: dynamicUnitSize * kNumObjects,
+		usage: STORAGE | COPY_DST,
+	})
+
+	const staticStorageValues = new Float32Array(staticStorageBuffer.size / 4)
 	for (let i = 0; i < kNumObjects; ++i) {
-		const uniformValues = makeStructuredView(defs.uniforms.dynamicUniforms)
-		const staticUniformValues = makeStructuredView(defs.uniforms.ourStruct)
-		uniformValues.set({ scale: [1, 1] })
-		staticUniformValues.set({
-			color: [rand(), rand(), rand(), 1],
-			offset: [rand(-0.9, 0.9), rand(-0.9, 0.9)],
-		})
-		const staticUniformBuffer = device.createBuffer({
-			label: `static uniforms for obj: ${i}`,
-			size: staticUniformValues.arrayBuffer.byteLength,
-			usage: UNIFORM | COPY_DST,
-		})
-
-		device.queue.writeBuffer(staticUniformBuffer, 0, staticUniformValues.arrayBuffer)
-
-		const uniformBuffer = device.createBuffer({
-			label: `uniforms for obj: ${i}`,
-			size: uniformValues.arrayBuffer.byteLength,
-			usage: UNIFORM | COPY_DST,
-		})
-
-		const bindGroup = device.createBindGroup({
-			label: `bind group for obj: ${i}`,
-			layout: pipeline.getBindGroupLayout(0),
-			entries: [
-				{
-					binding: 0,
-					resource: { buffer: staticUniformBuffer },
-				},
-				{
-					binding: 1,
-					resource: { buffer: uniformBuffer },
-				},
-			],
-		})
-
+		const offset = i * (staticUnitSize / 4)
+		staticStorageValues.set([rand(), rand(), rand(), 1], offset + 0)
+		staticStorageValues.set([rand(-0.9, 0.9), rand(-0.9, 0.9)], offset + 4)
 		objectInfos.push({
-			scale: rand(0.2, 0.5),
-			uniformBuffer,
-			uniformValues,
-			bindGroup,
+			scale: rand(0.1, 0.4),
 		})
 	}
+	device.queue.writeBuffer(staticStorageBuffer, 0, staticStorageValues)
+
+	const storageValues = new Float32Array(dynamicStorageBuffer.size / 4)
+
+	const { vertexData, numVertices } = createCircleVertices({
+		numSubdivisions: 32,
+		radius: 0.5,
+		innerRadius: 0.25,
+	})
+	const vertexStorageBuffer = device.createBuffer({
+		label: 'storage buffer vertices',
+		size: vertexData.byteLength,
+		usage: STORAGE | COPY_DST,
+	})
+	device.queue.writeBuffer(vertexStorageBuffer, 0, vertexData)
+
+	const bindGroup = device.createBindGroup({
+		label: 'bind group for objects',
+		layout: pipeline.getBindGroupLayout(0),
+		entries: [
+			{ binding: 0, resource: { buffer: staticStorageBuffer } },
+			{ binding: 1, resource: { buffer: dynamicStorageBuffer } },
+			{ binding: 2, resource: { buffer: vertexStorageBuffer } },
+		],
+	})
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
 		label: 'our basic canvas renderPass',
@@ -151,45 +208,43 @@ async function renderPass() {
 		],
 	}
 
-	const canvasToSizeMap = new WeakMap<HTMLCanvasElement, { width: number; height: number }>()
+	// const canvasToSizeMap = new WeakMap<HTMLCanvasElement, { width: number; height: number }>()
 
-	function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement) {
-		let { width, height } = canvasToSizeMap.get(canvas) || { width: canvas.width, height: canvas.height }
+	// function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement) {
+	// 	let { width, height } = canvasToSizeMap.get(canvas) || { width: canvas.width, height: canvas.height }
 
-		width = Math.max(1, Math.min(width, device.limits.maxTextureDimension2D))
-		height = Math.max(1, Math.min(height, device.limits.maxTextureDimension2D))
+	// 	width = Math.max(1, Math.min(width, device.limits.maxTextureDimension2D))
+	// 	height = Math.max(1, Math.min(height, device.limits.maxTextureDimension2D))
 
-		const needResize = canvas.width !== width || canvas.height !== height
-		if (needResize) {
-			canvas.width = width
-			canvas.height = height
-		}
-		return needResize
-	}
+	// 	const needResize = canvas.width !== width || canvas.height !== height
+	// 	if (needResize) {
+	// 		canvas.width = width
+	// 		canvas.height = height
+	// 	}
+	// 	return needResize
+	// }
 
 	function render() {
-		if (!context || !device) return
-
-		resizeCanvasToDisplaySize(canvas)
+		if (!context || !device) return // resizeCanvasToDisplaySize(canvas)
 		;(renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[1].view = context
 			.getCurrentTexture()
 			.createView()
 
 		const encoder = device.createCommandEncoder({ label: 'our encoder' })
-		//通过特定的 renderPass 而不是直接通过 commandEncoder 来录制渲染命令，
-		//主要是为了提供更高效的资源管理、特定于渲染的优化、更清晰的 API 设计、支持并行执行和延迟提交，
-		//以及提供专门处理不同任务的 Pass 类型。renderPass 的抽象使得开发者能够更方便地使用 GPU 进行渲染任务，
-		//并且使得 WebGPU 可以在后台进行更高效的性能优化。
 		const pass = encoder.beginRenderPass(renderPassDescriptor)
 		pass.setPipeline(pipeline) //renderPass调用的方法不会直接执行，而是录制在 command buffer中，直接提交到 GPU 后才会执行
 
 		const aspect = canvas.width / canvas.height
-		for (const { scale, bindGroup, uniformValues, uniformBuffer } of objectInfos) {
-			uniformValues.set({ scale: [scale / aspect, scale] })
-			device.queue.writeBuffer(uniformBuffer, 0, uniformValues.arrayBuffer)
-			pass.setBindGroup(0, bindGroup)
-			pass.draw(3)
+
+		for (let i = 0; i < kNumObjects; ++i) {
+			const offset = (i * dynamicUnitSize) / 4
+			const { scale } = objectInfos[i]
+			storageValues.set([scale / aspect, scale], offset)
 		}
+		device.queue.writeBuffer(dynamicStorageBuffer, 0, storageValues)
+
+		pass.setBindGroup(0, bindGroup)
+		pass.draw(numVertices, kNumObjects)
 
 		pass.end()
 
@@ -197,17 +252,17 @@ async function renderPass() {
 		device.queue.submit([commandBuffer])
 	}
 
-	const observer = new ResizeObserver((entries) => {
-		for (const entry of entries) {
-			canvasToSizeMap.set(entry.target as HTMLCanvasElement, {
-				width: entry.contentBoxSize[0].inlineSize,
-				height: entry.contentBoxSize[0].blockSize,
-			})
-			render()
-		}
-	})
+	// const observer = new ResizeObserver((entries) => {
+	// 	for (const entry of entries) {
+	// 		canvasToSizeMap.set(entry.target as HTMLCanvasElement, {
+	// 			width: entry.contentBoxSize[0].inlineSize,
+	// 			height: entry.contentBoxSize[0].blockSize,
+	// 		})
+	// 		render()
+	// 	}
+	// })
 
-	observer.observe(canvas)
+	// observer.observe(canvas)
 
 	render()
 }
