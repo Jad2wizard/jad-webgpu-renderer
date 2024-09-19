@@ -32,15 +32,21 @@ function createCircleVertices({
 	endAngle = Math.PI * 2,
 } = {}) {
 	const numVertices = numSubdivisions * 3 * 2
-	const vertexData = new Float32Array(numVertices * (2 + 3))
+	//将 perVertexColor 有 float32x3 改为 unorm8x4。单个顶点的 color 由12字节变为4字节
+	//一个unorm8x4占用4字节空间，等于一个 float32
+	const vertexData = new Float32Array(numVertices * (2 + 1))
+	const vertexColorData = new Uint8Array(vertexData.buffer)
 
 	let offset = 0
 	const addVertex = (x: number, y: number, r: number, g: number, b: number) => {
 		vertexData[offset++] = x
 		vertexData[offset++] = y
-		vertexData[offset++] = r
-		vertexData[offset++] = g
-		vertexData[offset++] = b
+		//unorm8在 js 端取值范围为0到255，webgpu 就将 unorm 转换到0到1之间传给着色器
+		vertexColorData[offset * 4 + 0] = r * 255
+		vertexColorData[offset * 4 + 1] = g * 255
+		vertexColorData[offset * 4 + 2] = b * 255
+		vertexColorData[offset * 4 + 3] = 255
+		offset++
 	}
 
 	const innerColor: [number, number, number] = [1, 1, 1]
@@ -127,11 +133,11 @@ async function renderPass() {
 			module: shaderModule,
 			buffers: [
 				{
-					arrayStride: (2 + 3) * 4, // 2 floats, 4 bytes each
+					arrayStride: (2 + 1) * 4, // 2 floats, 4 bytes each
 					stepMode: 'vertex',
 					attributes: [
 						{ shaderLocation: 0, offset: 0, format: 'float32x2' }, // position
-						{ shaderLocation: 4, offset: 2 * 4, format: 'float32x3' }, // perVertexColor
+						{ shaderLocation: 4, offset: 2 * 4, format: 'unorm8x4' }, // perVertexColor
 						//perVertexColor 在 wgsl 中的类型为 vec4f，但在 js 中设置的却是 float32x3
 						//这样并不会影响渲染结果，因为 wgsl 中的 vec4f 的默认值为 (0, 0, 0, 1)。webgpu 在
 						//解析perVertexColor 顶点数据时会自动补齐最后一个分量为1.所以 webgpu 中的顶点数据
@@ -139,11 +145,11 @@ async function renderPass() {
 					],
 				},
 				{
-					arrayStride: (4 + 2) * 4, // 2 floats, 4 bytes each
+					arrayStride: (1 + 2) * 4, // 2 floats, 4 bytes each
 					stepMode: 'instance',
 					attributes: [
-						{ shaderLocation: 1, offset: 0, format: 'float32x4' }, // color
-						{ shaderLocation: 2, offset: 4 * 4, format: 'float32x2' }, // offset
+						{ shaderLocation: 1, offset: 0, format: 'unorm8x4' }, // color
+						{ shaderLocation: 2, offset: 1 * 4, format: 'float32x2' }, // offset
 					],
 				},
 				{
@@ -165,7 +171,7 @@ async function renderPass() {
 	const kNumObjects = 100
 	const objectInfos: any[] = []
 	//@ts-ignore
-	const staticUnitSize = (4 + 2) * 4
+	const staticUnitSize = (1 + 2) * 4
 	//@ts-ignore
 	const dynamicUnitSize = 2 * 4
 
@@ -180,16 +186,20 @@ async function renderPass() {
 		usage: VERTEX | COPY_DST,
 	})
 
-	const staticStorageValues = new Float32Array(staticVertexBuffer.size / 4)
+	const staticVertexValues = new Float32Array(staticVertexBuffer.size / 4)
+	const colorValues = new Uint8Array(staticVertexValues.buffer)
 	for (let i = 0; i < kNumObjects; ++i) {
 		const offset = i * (staticUnitSize / 4)
-		staticStorageValues.set([rand(), rand(), rand(), 1], offset + 0)
-		staticStorageValues.set([rand(-0.9, 0.9), rand(-0.9, 0.9)], offset + 4)
+		colorValues[offset * 4 + 0] = rand() * 255
+		colorValues[offset * 4 + 1] = rand() * 255
+		colorValues[offset * 4 + 2] = rand() * 255
+		colorValues[offset * 4 + 3] = 255
+		staticVertexValues.set([rand(-0.9, 0.9), rand(-0.9, 0.9)], offset + 1)
 		objectInfos.push({
 			scale: rand(0.1, 0.4),
 		})
 	}
-	device.queue.writeBuffer(staticVertexBuffer, 0, staticStorageValues)
+	device.queue.writeBuffer(staticVertexBuffer, 0, staticVertexValues)
 
 	const storageValues = new Float32Array(dynamicVertexBuffer.size / 4)
 
