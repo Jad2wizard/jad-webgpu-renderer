@@ -1,6 +1,6 @@
 import { makeShaderDataDefinitions, makeStructuredView } from 'webgpu-utils'
 
-const { UNIFORM, VERTEX, STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
+const { UNIFORM, INDEX, VERTEX, STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
 
 async function checkWebGPU() {
 	const adapter = await navigator.gpu?.requestAdapter()
@@ -31,11 +31,15 @@ function createCircleVertices({
 	startAngle = 0,
 	endAngle = Math.PI * 2,
 } = {}) {
-	const numVertices = numSubdivisions * 3 * 2
+	//除了startAngle和endAngle之外，各个区间共用一条边，边的总数为区间数加一，一条边两个顶点
+	const numVertices = (numSubdivisions + 1) * 2
 	//将 perVertexColor 有 float32x3 改为 unorm8x4。单个顶点的 color 由12字节变为4字节
 	//一个unorm8x4占用4字节空间，等于一个 float32
 	const vertexData = new Float32Array(numVertices * (2 + 1))
 	const vertexColorData = new Uint8Array(vertexData.buffer)
+
+	const innerColor: [number, number, number] = [1, 1, 1]
+	const outerColor: [number, number, number] = [0.1, 0.1, 0.1]
 
 	let offset = 0
 	const addVertex = (x: number, y: number, r: number, g: number, b: number) => {
@@ -49,30 +53,37 @@ function createCircleVertices({
 		offset++
 	}
 
-	const innerColor: [number, number, number] = [1, 1, 1]
-	const outerColor: [number, number, number] = [0.1, 0.1, 0.1]
-
-	for (let i = 0; i < numSubdivisions; ++i) {
+	/**
+	 * 0 2 4 6 8 ...
+	 *
+	 * 1 3 5 7 9 ...
+	 */
+	for (let i = 0; i <= numSubdivisions; ++i) {
 		const angle1 = startAngle + ((i + 0) * (endAngle - startAngle)) / numSubdivisions
-		const angle2 = startAngle + ((i + 1) * (endAngle - startAngle)) / numSubdivisions
 
 		const c1 = Math.cos(angle1)
 		const s1 = Math.sin(angle1)
-		const c2 = Math.cos(angle2)
-		const s2 = Math.sin(angle2)
 
 		addVertex(c1 * radius, s1 * radius, ...outerColor)
-		addVertex(c2 * radius, s2 * radius, ...outerColor)
 		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
+	}
 
-		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
-		addVertex(c2 * radius, s2 * radius, ...outerColor)
-		addVertex(c2 * innerRadius, s2 * innerRadius, ...innerColor)
+	//一个区间两个三角形一共六个顶点索引
+	const indexData = new Uint32Array(numSubdivisions * 6)
+	for (let i = 0; i < numSubdivisions; ++i) {
+		indexData[i * 6 + 0] = i * 2 + 0
+		indexData[i * 6 + 1] = i * 2 + 1
+		indexData[i * 6 + 2] = i * 2 + 2
+
+		indexData[i * 6 + 3] = i * 2 + 1
+		indexData[i * 6 + 4] = i * 2 + 3
+		indexData[i * 6 + 5] = i * 2 + 2
 	}
 
 	return {
 		vertexData,
-		numVertices,
+		indexData,
+		numVertices: indexData.length,
 	}
 }
 
@@ -203,7 +214,7 @@ async function renderPass() {
 
 	const storageValues = new Float32Array(dynamicVertexBuffer.size / 4)
 
-	const { vertexData, numVertices } = createCircleVertices({
+	const { vertexData, numVertices, indexData } = createCircleVertices({
 		numSubdivisions: 32,
 		radius: 0.5,
 		innerRadius: 0.25,
@@ -214,6 +225,13 @@ async function renderPass() {
 		usage: VERTEX | COPY_DST,
 	})
 	device.queue.writeBuffer(vertexBuffer, 0, vertexData)
+
+	const indexBuffer = device.createBuffer({
+		label: 'index buffer',
+		size: indexData.byteLength,
+		usage: INDEX | COPY_DST,
+	})
+	device.queue.writeBuffer(indexBuffer, 0, indexData)
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
 		label: 'our basic canvas renderPass',
@@ -228,24 +246,25 @@ async function renderPass() {
 		],
 	}
 
-	// const canvasToSizeMap = new WeakMap<HTMLCanvasElement, { width: number; height: number }>()
+	const canvasToSizeMap = new WeakMap<HTMLCanvasElement, { width: number; height: number }>()
 
-	// function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement) {
-	// 	let { width, height } = canvasToSizeMap.get(canvas) || { width: canvas.width, height: canvas.height }
+	function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement) {
+		let { width, height } = canvasToSizeMap.get(canvas) || { width: canvas.width, height: canvas.height }
 
-	// 	width = Math.max(1, Math.min(width, device.limits.maxTextureDimension2D))
-	// 	height = Math.max(1, Math.min(height, device.limits.maxTextureDimension2D))
+		width = Math.max(1, Math.min(width, device.limits.maxTextureDimension2D))
+		height = Math.max(1, Math.min(height, device.limits.maxTextureDimension2D))
 
-	// 	const needResize = canvas.width !== width || canvas.height !== height
-	// 	if (needResize) {
-	// 		canvas.width = width
-	// 		canvas.height = height
-	// 	}
-	// 	return needResize
-	// }
+		const needResize = canvas.width !== width || canvas.height !== height
+		if (needResize) {
+			canvas.width = width
+			canvas.height = height
+		}
+		return needResize
+	}
 
 	function render() {
-		if (!context || !device) return // resizeCanvasToDisplaySize(canvas)
+		if (!context || !device) return
+		resizeCanvasToDisplaySize(canvas)
 		;(renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[1].view = context
 			.getCurrentTexture()
 			.createView()
@@ -256,6 +275,7 @@ async function renderPass() {
 		pass.setVertexBuffer(0, vertexBuffer)
 		pass.setVertexBuffer(1, staticVertexBuffer)
 		pass.setVertexBuffer(2, dynamicVertexBuffer)
+		pass.setIndexBuffer(indexBuffer, 'uint32')
 
 		const aspect = canvas.width / canvas.height
 
@@ -266,7 +286,7 @@ async function renderPass() {
 		}
 		device.queue.writeBuffer(dynamicVertexBuffer, 0, storageValues)
 
-		pass.draw(numVertices, kNumObjects)
+		pass.drawIndexed(numVertices, kNumObjects)
 
 		pass.end()
 
@@ -274,17 +294,17 @@ async function renderPass() {
 		device.queue.submit([commandBuffer])
 	}
 
-	// const observer = new ResizeObserver((entries) => {
-	// 	for (const entry of entries) {
-	// 		canvasToSizeMap.set(entry.target as HTMLCanvasElement, {
-	// 			width: entry.contentBoxSize[0].inlineSize,
-	// 			height: entry.contentBoxSize[0].blockSize,
-	// 		})
-	// 		render()
-	// 	}
-	// })
+	const observer = new ResizeObserver((entries) => {
+		for (const entry of entries) {
+			canvasToSizeMap.set(entry.target as HTMLCanvasElement, {
+				width: entry.contentBoxSize[0].inlineSize,
+				height: entry.contentBoxSize[0].blockSize,
+			})
+			render()
+		}
+	})
 
-	// observer.observe(canvas)
+	observer.observe(canvas)
 
 	render()
 }
