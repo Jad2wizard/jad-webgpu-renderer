@@ -1,5 +1,7 @@
 import { makeShaderDataDefinitions, makeStructuredView } from 'webgpu-utils'
 
+const { UNIFORM, VERTEX, STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
+
 async function checkWebGPU() {
 	const adapter = await navigator.gpu?.requestAdapter()
 	const device = await adapter?.requestDevice()
@@ -30,13 +32,19 @@ function createCircleVertices({
 	endAngle = Math.PI * 2,
 } = {}) {
 	const numVertices = numSubdivisions * 3 * 2
-	const vertexData = new Float32Array(numVertices * 2)
+	const vertexData = new Float32Array(numVertices * (2 + 3))
 
 	let offset = 0
-	const addVertex = (x: number, y: number) => {
+	const addVertex = (x: number, y: number, r: number, g: number, b: number) => {
 		vertexData[offset++] = x
 		vertexData[offset++] = y
+		vertexData[offset++] = r
+		vertexData[offset++] = g
+		vertexData[offset++] = b
 	}
+
+	const innerColor: [number, number, number] = [1, 1, 1]
+	const outerColor: [number, number, number] = [0.1, 0.1, 0.1]
 
 	for (let i = 0; i < numSubdivisions; ++i) {
 		const angle1 = startAngle + ((i + 0) * (endAngle - startAngle)) / numSubdivisions
@@ -47,13 +55,13 @@ function createCircleVertices({
 		const c2 = Math.cos(angle2)
 		const s2 = Math.sin(angle2)
 
-		addVertex(c1 * radius, s1 * radius)
-		addVertex(c2 * radius, s2 * radius)
-		addVertex(c1 * innerRadius, s1 * innerRadius)
+		addVertex(c1 * radius, s1 * radius, ...outerColor)
+		addVertex(c2 * radius, s2 * radius, ...outerColor)
+		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
 
-		addVertex(c1 * innerRadius, s1 * innerRadius)
-		addVertex(c2 * radius, s2 * radius)
-		addVertex(c2 * innerRadius, s2 * innerRadius)
+		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
+		addVertex(c2 * radius, s2 * radius, ...outerColor)
+		addVertex(c2 * innerRadius, s2 * innerRadius, ...innerColor)
 	}
 
 	return {
@@ -61,8 +69,6 @@ function createCircleVertices({
 		numVertices,
 	}
 }
-
-const { UNIFORM, STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
 
 async function renderPass() {
 	const device = await checkWebGPU()
@@ -82,16 +88,12 @@ async function renderPass() {
 	})
 
 	const shaderCode = `
-            struct Uniform {
-                color: vec4f,
-                offset: vec2f,
-            };
-            struct DynamicUniform {
-                scale: vec2f,
-            };
-
 			struct Vertex {
-				position: vec2f,
+				@location(0) position: vec2f,
+				@location(1) color: vec4f,
+				@location(2) offset: vec2f,
+				@location(3) scale: vec2f,
+				@location(4) perVertexColor: vec4f,
 			};
 
 			struct VSOut {
@@ -99,21 +101,11 @@ async function renderPass() {
 				@location(0) color: vec4f
 			};
 
-            @group(0) @binding(0) var<storage, read> uniforms: array<Uniform>;
-            @group(0) @binding(1) var<storage, read> dynamicUniforms: array<DynamicUniform>;
-			@group(0) @binding(2) var<storage, read> pos: array<Vertex>;
-
-            @vertex fn vs(
-                @builtin(vertex_index) vi: u32,
-				@builtin(instance_index) ii: u32
-            ) -> VSOut {
-				let staticUniform = uniforms[ii];
-				let dynamicUniform = dynamicUniforms[ii];
-
+            @vertex fn vs( vert: Vertex) -> VSOut {
 				var output: VSOut;
                 
-                output.position = vec4f(pos[vi].position * dynamicUniform.scale + staticUniform.offset, 0, 1);
-				output.color = staticUniform.color;
+                output.position = vec4f(vert.position * vert.scale + vert.offset, 0, 1);
+				output.color = vert.color * vert.perVertexColor;
 				return output;
             }
             
@@ -133,6 +125,35 @@ async function renderPass() {
 		vertex: {
 			entryPoint: 'vs',
 			module: shaderModule,
+			buffers: [
+				{
+					arrayStride: (2 + 3) * 4, // 2 floats, 4 bytes each
+					stepMode: 'vertex',
+					attributes: [
+						{ shaderLocation: 0, offset: 0, format: 'float32x2' }, // position
+						{ shaderLocation: 4, offset: 2 * 4, format: 'float32x3' }, // perVertexColor
+						//perVertexColor 在 wgsl 中的类型为 vec4f，但在 js 中设置的却是 float32x3
+						//这样并不会影响渲染结果，因为 wgsl 中的 vec4f 的默认值为 (0, 0, 0, 1)。webgpu 在
+						//解析perVertexColor 顶点数据时会自动补齐最后一个分量为1.所以 webgpu 中的顶点数据
+						//的类型在 wgsl 中和 js 中的定义不一定要一致
+					],
+				},
+				{
+					arrayStride: (4 + 2) * 4, // 2 floats, 4 bytes each
+					stepMode: 'instance',
+					attributes: [
+						{ shaderLocation: 1, offset: 0, format: 'float32x4' }, // color
+						{ shaderLocation: 2, offset: 4 * 4, format: 'float32x2' }, // offset
+					],
+				},
+				{
+					arrayStride: 2 * 4, // 2 floats, 4 bytes each
+					stepMode: 'instance',
+					attributes: [
+						{ shaderLocation: 3, offset: 0, format: 'float32x2' }, // scale
+					],
+				},
+			],
 		},
 		fragment: {
 			entryPoint: 'fs',
@@ -141,26 +162,25 @@ async function renderPass() {
 		},
 	})
 
-	const defs = makeShaderDataDefinitions(shaderCode)
 	const kNumObjects = 100
 	const objectInfos: any[] = []
 	//@ts-ignore
-	const staticUnitSize = defs.storages.uniforms.typeDefinition.elementType.size
+	const staticUnitSize = (4 + 2) * 4
 	//@ts-ignore
-	const dynamicUnitSize = defs.storages.dynamicUniforms.typeDefinition.elementType.size
+	const dynamicUnitSize = 2 * 4
 
-	const staticStorageBuffer = device.createBuffer({
+	const staticVertexBuffer = device.createBuffer({
 		label: `static storage for objects`,
 		size: staticUnitSize * kNumObjects,
-		usage: STORAGE | COPY_DST,
+		usage: VERTEX | COPY_DST,
 	})
-	const dynamicStorageBuffer = device.createBuffer({
+	const dynamicVertexBuffer = device.createBuffer({
 		label: 'dynamic storage for objects',
 		size: dynamicUnitSize * kNumObjects,
-		usage: STORAGE | COPY_DST,
+		usage: VERTEX | COPY_DST,
 	})
 
-	const staticStorageValues = new Float32Array(staticStorageBuffer.size / 4)
+	const staticStorageValues = new Float32Array(staticVertexBuffer.size / 4)
 	for (let i = 0; i < kNumObjects; ++i) {
 		const offset = i * (staticUnitSize / 4)
 		staticStorageValues.set([rand(), rand(), rand(), 1], offset + 0)
@@ -169,31 +189,21 @@ async function renderPass() {
 			scale: rand(0.1, 0.4),
 		})
 	}
-	device.queue.writeBuffer(staticStorageBuffer, 0, staticStorageValues)
+	device.queue.writeBuffer(staticVertexBuffer, 0, staticStorageValues)
 
-	const storageValues = new Float32Array(dynamicStorageBuffer.size / 4)
+	const storageValues = new Float32Array(dynamicVertexBuffer.size / 4)
 
 	const { vertexData, numVertices } = createCircleVertices({
 		numSubdivisions: 32,
 		radius: 0.5,
 		innerRadius: 0.25,
 	})
-	const vertexStorageBuffer = device.createBuffer({
-		label: 'storage buffer vertices',
+	const vertexBuffer = device.createBuffer({
+		label: 'vertex buffer vertices',
 		size: vertexData.byteLength,
-		usage: STORAGE | COPY_DST,
+		usage: VERTEX | COPY_DST,
 	})
-	device.queue.writeBuffer(vertexStorageBuffer, 0, vertexData)
-
-	const bindGroup = device.createBindGroup({
-		label: 'bind group for objects',
-		layout: pipeline.getBindGroupLayout(0),
-		entries: [
-			{ binding: 0, resource: { buffer: staticStorageBuffer } },
-			{ binding: 1, resource: { buffer: dynamicStorageBuffer } },
-			{ binding: 2, resource: { buffer: vertexStorageBuffer } },
-		],
-	})
+	device.queue.writeBuffer(vertexBuffer, 0, vertexData)
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
 		label: 'our basic canvas renderPass',
@@ -233,6 +243,9 @@ async function renderPass() {
 		const encoder = device.createCommandEncoder({ label: 'our encoder' })
 		const pass = encoder.beginRenderPass(renderPassDescriptor)
 		pass.setPipeline(pipeline) //renderPass调用的方法不会直接执行，而是录制在 command buffer中，直接提交到 GPU 后才会执行
+		pass.setVertexBuffer(0, vertexBuffer)
+		pass.setVertexBuffer(1, staticVertexBuffer)
+		pass.setVertexBuffer(2, dynamicVertexBuffer)
 
 		const aspect = canvas.width / canvas.height
 
@@ -241,9 +254,8 @@ async function renderPass() {
 			const { scale } = objectInfos[i]
 			storageValues.set([scale / aspect, scale], offset)
 		}
-		device.queue.writeBuffer(dynamicStorageBuffer, 0, storageValues)
+		device.queue.writeBuffer(dynamicVertexBuffer, 0, storageValues)
 
-		pass.setBindGroup(0, bindGroup)
 		pass.draw(numVertices, kNumObjects)
 
 		pass.end()
