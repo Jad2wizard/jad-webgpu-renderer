@@ -1,7 +1,3 @@
-import { makeShaderDataDefinitions, makeStructuredView } from 'webgpu-utils'
-
-const { UNIFORM, INDEX, VERTEX, STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
-
 async function checkWebGPU() {
 	const adapter = await navigator.gpu?.requestAdapter()
 	const device = await adapter?.requestDevice()
@@ -13,79 +9,7 @@ async function checkWebGPU() {
 	return device
 }
 
-const rand = (min?: number, max?: number) => {
-	if (min === undefined) {
-		min = 0
-		max = 1
-	} else if (max === undefined) {
-		max = min
-		min = 0
-	}
-	return min + Math.random() * (max - min)
-}
-
-function createCircleVertices({
-	radius = 1,
-	numSubdivisions = 24,
-	innerRadius = 0,
-	startAngle = 0,
-	endAngle = Math.PI * 2,
-} = {}) {
-	//除了startAngle和endAngle之外，各个区间共用一条边，边的总数为区间数加一，一条边两个顶点
-	const numVertices = (numSubdivisions + 1) * 2
-	//将 perVertexColor 有 float32x3 改为 unorm8x4。单个顶点的 color 由12字节变为4字节
-	//一个unorm8x4占用4字节空间，等于一个 float32
-	const vertexData = new Float32Array(numVertices * (2 + 1))
-	const vertexColorData = new Uint8Array(vertexData.buffer)
-
-	const innerColor: [number, number, number] = [1, 1, 1]
-	const outerColor: [number, number, number] = [0.1, 0.1, 0.1]
-
-	let offset = 0
-	const addVertex = (x: number, y: number, r: number, g: number, b: number) => {
-		vertexData[offset++] = x
-		vertexData[offset++] = y
-		//unorm8在 js 端取值范围为0到255，webgpu 就将 unorm 转换到0到1之间传给着色器
-		vertexColorData[offset * 4 + 0] = r * 255
-		vertexColorData[offset * 4 + 1] = g * 255
-		vertexColorData[offset * 4 + 2] = b * 255
-		vertexColorData[offset * 4 + 3] = 255
-		offset++
-	}
-
-	/**
-	 * 0 2 4 6 8 ...
-	 *
-	 * 1 3 5 7 9 ...
-	 */
-	for (let i = 0; i <= numSubdivisions; ++i) {
-		const angle1 = startAngle + ((i + 0) * (endAngle - startAngle)) / numSubdivisions
-
-		const c1 = Math.cos(angle1)
-		const s1 = Math.sin(angle1)
-
-		addVertex(c1 * radius, s1 * radius, ...outerColor)
-		addVertex(c1 * innerRadius, s1 * innerRadius, ...innerColor)
-	}
-
-	//一个区间两个三角形一共六个顶点索引
-	const indexData = new Uint32Array(numSubdivisions * 6)
-	for (let i = 0; i < numSubdivisions; ++i) {
-		indexData[i * 6 + 0] = i * 2 + 0
-		indexData[i * 6 + 1] = i * 2 + 1
-		indexData[i * 6 + 2] = i * 2 + 2
-
-		indexData[i * 6 + 3] = i * 2 + 1
-		indexData[i * 6 + 4] = i * 2 + 3
-		indexData[i * 6 + 5] = i * 2 + 2
-	}
-
-	return {
-		vertexData,
-		indexData,
-		numVertices: indexData.length,
-	}
-}
+const { STORAGE, MAP_READ, COPY_DST, COPY_SRC } = GPUBufferUsage
 
 async function renderPass() {
 	const device = await checkWebGPU()
@@ -104,73 +28,52 @@ async function renderPass() {
 		format: presentationFormat,
 	})
 
-	const shaderCode = `
-			struct Vertex {
-				@location(0) position: vec2f,
-				@location(1) color: vec4f,
-				@location(2) offset: vec2f,
-				@location(3) scale: vec2f,
-				@location(4) perVertexColor: vec4f,
-			};
-
-			struct VSOut {
-				@builtin(position) position: vec4f,
-				@location(0) color: vec4f
-			};
-
-            @vertex fn vs( vert: Vertex) -> VSOut {
-				var output: VSOut;
-                
-                output.position = vec4f(vert.position * vert.scale + vert.offset, 0, 1);
-				output.color = vert.color * vert.perVertexColor;
-				return output;
-            }
-            
-            @fragment fn fs(@location(0) color: vec4f) -> @location(1) vec4f {
-                return color;
-            }
-    `
-
 	const shaderModule = device.createShaderModule({
-		label: 'triangle shaders with uniforms',
-		code: shaderCode,
+		label: 'our hardcoded checkerboard triangle shaders',
+		code: `
+            //定义一个结构体用以组织所有 inter-stage 变量
+            struct VSOutput {
+                //@builtin(position)并不是 inter-stage 变量，其在 vs 和 fs 中的含义不同
+                @builtin(position) position: vec4f,
+				@location(0) texcoord: vec2f
+            };
+
+            @vertex fn vs(
+                @builtin(vertex_index) vi: u32
+            ) -> VSOutput {
+                let pos = array(
+                    vec2f(0.0, 0.0),
+                    vec2f(1, 0),
+                    vec2f(0.0, 1),
+
+                    vec2f(0, 1),
+                    vec2f(1, 0),
+                    vec2f(1, 1),
+                );
+                
+                var vsOutput: VSOutput;
+				let xy = pos[vi]
+				vsOutput.position = vec4f(xy, 0, 1);
+				vsOutput.texcoord = xy;
+
+                return vsOutput;
+            }
+
+			@group(0) @binding(0) var ourSampler: sampler;
+			@group(0) @binding(1) var ourTexture: texture_2d<f32>;
+            
+            @fragment fn fs(fsInput: VSOutput) -> @location(1) vec4f {
+				return textureSample(ourTexture, ourSampler, fsInput.texcoord);
+            }
+        `,
 	})
 
 	const pipeline = device.createRenderPipeline({
-		label: 'storage buffer like uniform',
+		label: 'our hardcoded checkerboard triangle pipeline',
 		layout: 'auto',
 		vertex: {
 			entryPoint: 'vs',
 			module: shaderModule,
-			buffers: [
-				{
-					arrayStride: (2 + 1) * 4, // 2 floats, 4 bytes each
-					stepMode: 'vertex',
-					attributes: [
-						{ shaderLocation: 0, offset: 0, format: 'float32x2' }, // position
-						{ shaderLocation: 4, offset: 2 * 4, format: 'unorm8x4' }, // perVertexColor
-						//perVertexColor 在 wgsl 中的类型为 vec4f，但在 js 中设置的却是 float32x3
-						//这样并不会影响渲染结果，因为 wgsl 中的 vec4f 的默认值为 (0, 0, 0, 1)。webgpu 在
-						//解析perVertexColor 顶点数据时会自动补齐最后一个分量为1.所以 webgpu 中的顶点数据
-						//的类型在 wgsl 中和 js 中的定义不一定要一致
-					],
-				},
-				{
-					arrayStride: (1 + 2) * 4, // 2 floats, 4 bytes each
-					stepMode: 'instance',
-					attributes: [
-						{ shaderLocation: 1, offset: 0, format: 'unorm8x4' }, // color
-						{ shaderLocation: 2, offset: 1 * 4, format: 'float32x2' }, // offset
-					],
-				},
-				{
-					arrayStride: 2 * 4, // 2 floats, 4 bytes each
-					stepMode: 'instance',
-					attributes: [
-						{ shaderLocation: 3, offset: 0, format: 'float32x2' }, // scale
-					],
-				},
-			],
 		},
 		fragment: {
 			entryPoint: 'fs',
@@ -178,60 +81,6 @@ async function renderPass() {
 			targets: [null, { format: presentationFormat }],
 		},
 	})
-
-	const kNumObjects = 100
-	const objectInfos: any[] = []
-	//@ts-ignore
-	const staticUnitSize = (1 + 2) * 4
-	//@ts-ignore
-	const dynamicUnitSize = 2 * 4
-
-	const staticVertexBuffer = device.createBuffer({
-		label: `static storage for objects`,
-		size: staticUnitSize * kNumObjects,
-		usage: VERTEX | COPY_DST,
-	})
-	const dynamicVertexBuffer = device.createBuffer({
-		label: 'dynamic storage for objects',
-		size: dynamicUnitSize * kNumObjects,
-		usage: VERTEX | COPY_DST,
-	})
-
-	const staticVertexValues = new Float32Array(staticVertexBuffer.size / 4)
-	const colorValues = new Uint8Array(staticVertexValues.buffer)
-	for (let i = 0; i < kNumObjects; ++i) {
-		const offset = i * (staticUnitSize / 4)
-		colorValues[offset * 4 + 0] = rand() * 255
-		colorValues[offset * 4 + 1] = rand() * 255
-		colorValues[offset * 4 + 2] = rand() * 255
-		colorValues[offset * 4 + 3] = 255
-		staticVertexValues.set([rand(-0.9, 0.9), rand(-0.9, 0.9)], offset + 1)
-		objectInfos.push({
-			scale: rand(0.1, 0.4),
-		})
-	}
-	device.queue.writeBuffer(staticVertexBuffer, 0, staticVertexValues)
-
-	const storageValues = new Float32Array(dynamicVertexBuffer.size / 4)
-
-	const { vertexData, numVertices, indexData } = createCircleVertices({
-		numSubdivisions: 32,
-		radius: 0.5,
-		innerRadius: 0.25,
-	})
-	const vertexBuffer = device.createBuffer({
-		label: 'vertex buffer vertices',
-		size: vertexData.byteLength,
-		usage: VERTEX | COPY_DST,
-	})
-	device.queue.writeBuffer(vertexBuffer, 0, vertexData)
-
-	const indexBuffer = device.createBuffer({
-		label: 'index buffer',
-		size: indexData.byteLength,
-		usage: INDEX | COPY_DST,
-	})
-	device.queue.writeBuffer(indexBuffer, 0, indexData)
 
 	const renderPassDescriptor: GPURenderPassDescriptor = {
 		label: 'our basic canvas renderPass',
@@ -270,24 +119,14 @@ async function renderPass() {
 			.createView()
 
 		const encoder = device.createCommandEncoder({ label: 'our encoder' })
+
+		//通过特定的 renderPass 而不是直接通过 commandEncoder 来录制渲染命令，
+		//主要是为了提供更高效的资源管理、特定于渲染的优化、更清晰的 API 设计、支持并行执行和延迟提交，
+		//以及提供专门处理不同任务的 Pass 类型。renderPass 的抽象使得开发者能够更方便地使用 GPU 进行渲染任务，
+		//并且使得 WebGPU 可以在后台进行更高效的性能优化。
 		const pass = encoder.beginRenderPass(renderPassDescriptor)
 		pass.setPipeline(pipeline) //renderPass调用的方法不会直接执行，而是录制在 command buffer中，直接提交到 GPU 后才会执行
-		pass.setVertexBuffer(0, vertexBuffer)
-		pass.setVertexBuffer(1, staticVertexBuffer)
-		pass.setVertexBuffer(2, dynamicVertexBuffer)
-		pass.setIndexBuffer(indexBuffer, 'uint32')
-
-		const aspect = canvas.width / canvas.height
-
-		for (let i = 0; i < kNumObjects; ++i) {
-			const offset = (i * dynamicUnitSize) / 4
-			const { scale } = objectInfos[i]
-			storageValues.set([scale / aspect, scale], offset)
-		}
-		device.queue.writeBuffer(dynamicVertexBuffer, 0, storageValues)
-
-		pass.drawIndexed(numVertices, kNumObjects)
-
+		pass.draw(3)
 		pass.end()
 
 		const commandBuffer = encoder.finish()
