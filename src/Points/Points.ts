@@ -170,6 +170,7 @@ class Points extends Model implements IPlayable {
 	}
 
 	private reallocate() {
+		console.log('reallocating')
 		for (let attr of this.geometry.getAttributes()) {
 			attr.reallocate(this.total * attr.itemSize)
 		}
