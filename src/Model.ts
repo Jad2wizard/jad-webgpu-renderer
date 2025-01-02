@@ -93,7 +93,7 @@ class Model implements IRenderable {
 		return null
 	}
 
-	public setAttribute(k: string, value: TypedArray) {
+	public updateAttribute(k: string, value: TypedArray) {
 		const attr = this._geometry.getAttribute(k)
 		if (attr) {
 			attr.array = value
@@ -136,10 +136,6 @@ class Model implements IRenderable {
 		const index = geometry.getIndex()
 		if (index) pass.drawIndexed(index.length, instanceCount)
 		else pass.draw(geometry.vertexCount, instanceCount)
-	}
-
-	public getStyle(id?: string) {
-		return this._style
 	}
 
 	public dispose() {

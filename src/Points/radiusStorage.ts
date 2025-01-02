@@ -42,7 +42,14 @@ class RadiusStorage extends Storage {
 		return !!this._value
 	}
 
-	updatePointsRadius(radius: number, defaultRadius: number, total: number, pointIndices: number[]) {
+	getPointRadius(index: number) {
+		if (!this.value) return undefined
+		const i = Math.floor(index / 4)
+		const offset = index % 4
+		return unpackUint32ToUint8(this.value[i])[offset]
+	}
+
+	updatePointsRadius(radius: number | number[], defaultRadius: number, total: number, pointIndices: number[]) {
 		if (!this.value) {
 			const uint32Arr = transformRadiusArray({ value: defaultRadius, total })
 			this.updateValue(uint32Arr)
@@ -52,7 +59,7 @@ class RadiusStorage extends Storage {
 				const index = Math.floor(i / 4)
 				const offset = i % 4
 				const unpacked = unpackUint32ToUint8(this.value[index])
-				unpacked[offset] = radius
+				unpacked[offset] = Array.isArray(radius) ? radius[pointIndices.indexOf(i)] : radius
 				this.value[index] = packUint8ToUint32(unpacked)
 			}
 		}

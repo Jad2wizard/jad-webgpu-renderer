@@ -75,4 +75,67 @@ export const unpackUint32ToUint8 = (num: number) => {
 	return res
 }
 
+/**
+ * 将 16 位半精度浮动数（IEEE 754 half-precision float）转换为 32 位单精度浮动数（float32）
+ *
+ * 16 位半精度浮动数采用以下结构：
+ * - 1 位符号位
+ * - 5 位指数部分（exponent）
+ * - 10 位尾数部分（mantissa）
+ *
+ * @param {number} half - 一个 16 位整数，表示一个半精度浮动数。此数应符合 IEEE 754 半精度浮动数格式。
+ * @returns {number} 返回转换后的 32 位单精度浮动数（float32）。
+ */
+export function halfToFloat(half: number): number {
+	// 提取符号位（sign bit）：取最高位，0 表示正数，1 表示负数
+	const sign = (half >> 15) & 0x1
+
+	// 提取指数部分（exponent）：取接下来的 5 位
+	const exponent = (half >> 10) & 0x1f
+
+	// 提取尾数部分（mantissa）：取最低的 10 位
+	const mantissa = half & 0x3ff
+
+	// 处理指数为 0 的情况（表示零或非规格化数）
+	if (exponent === 0) {
+		// 如果尾数部分也为 0，则表示零（0 或 -0）
+		if (mantissa === 0) {
+			return sign === 0 ? 0 : -0
+		} else {
+			// 如果尾数部分不为 0，表示一个非规格化数（denormalized number）
+			// 这种情况的指数为 -14
+			return ((sign === 0 ? 1 : -1) * Math.pow(2, -14) * mantissa) / Math.pow(2, 10)
+		}
+	} else if (exponent === 0x1f) {
+		// 如果指数部分是 11111（0x1f），表示无穷大（Infinity）或 NaN（Not a Number）
+		// - 如果尾数部分为 0，表示无穷大
+		// - 如果尾数部分不为 0，表示 NaN
+		if (mantissa === 0) {
+			return sign === 0 ? Infinity : -Infinity
+		} else {
+			return NaN
+		}
+	} else {
+		// 根据 IEEE 754 标准的计算方式，转换为浮动数
+		// 使用公式：(-1)^sign * 2^(exponent - 15) * (1 + mantissa / 1024)
+		return (sign === 0 ? 1 : -1) * Math.pow(2, exponent - 15) * (1 + mantissa / Math.pow(2, 10))
+	}
+}
+
+/**
+ * 将 Uint16Array 中的每个 16 位半精度浮动数转换为 32 位单精度浮动数（float32）
+ *
+ * @param {Uint16Array} data - 一个包含多个 16 位半精度浮动数的数组（Uint16Array）。
+ * @returns {Float32Array} 返回一个包含转换后的 32 位单精度浮动数的数组（Float32Array）。
+ */
+export function convertHalfToFloatArray(data: Uint16Array): Float32Array {
+	const result = new Float32Array(data.length)
+
+	for (let i = 0; i < data.length; i++) {
+		result[i] = halfToFloat(data[i])
+	}
+
+	return result
+}
+
 console.log(packUint8ToUint32([1, 0, 0, 1]))

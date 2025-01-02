@@ -21,7 +21,7 @@ class Scene extends Object3D {
 		if (!this._modelList.includes(model)) this._modelList.push(model)
 	}
 
-	public removeModel(model: Model) {
+	public removeModel(model: IRenderable) {
 		const index = this._modelList.indexOf(model)
 		if (index > -1) {
 			this._modelList.splice(index, 1)

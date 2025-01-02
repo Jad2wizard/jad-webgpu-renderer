@@ -160,11 +160,20 @@ class Renderer {
 		for (let model of scene.modelList) {
 			if (model.visible) model.render(this, pass, camera)
 		}
+
 		pass.end()
 
 		const commandBuffer = encoder.finish()
 		this.device.queue.submit([commandBuffer])
+
 		// await this.device.queue.onSubmittedWorkDone()
+		// for (let model of scene.modelList) {
+		// 	if (model instanceof Heatmap) {
+		// 		await delay(50)
+		// 		await model.setMaxMinHeatValue(this, 'max')
+		// 		await model.setMaxMinHeatValue(this, 'min')
+		// 	}
+		// }
 		// console.log(new Date().valueOf() - s)
 	}
 

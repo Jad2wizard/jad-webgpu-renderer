@@ -1,6 +1,6 @@
 node_modules/*
 node_modules_old/*
-dist/
+dist/*.js
 *.DS_Store
 .idea/*
 diff.log

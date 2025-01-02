@@ -62,7 +62,6 @@ export const genComputeHeatValueShaderCode = (hasStartTime: boolean) => `
         return vec4f(h, 0, 0, 1);
     }
 `
-
 export const computeMaxHeatValueShaderCode = `
     @group(0) @binding(0) var heatValTex: texture_2d<f32>;
     @group(0) @binding(1) var<uniform> resolution: vec2f;
@@ -85,6 +84,33 @@ export const computeMaxHeatValueShaderCode = `
         let x = vi - i32(resolution.x / ${sampleRate}) * y;
         let color = textureLoad(heatValTex, vec2i(x * ${sampleRate}, y * ${sampleRate}), 0);
         return color;
+    }
+`
+
+export const computeMinHeatValueShaderCode = `
+    @group(0) @binding(0) var heatValTex: texture_2d<f32>;
+    @group(0) @binding(1) var<uniform> resolution: vec2f;
+
+    struct VSOut {
+        @location(0) vi: f32,
+        @builtin(position) position: vec4f
+    }
+
+    @vertex fn vs(@builtin(vertex_index) vii: u32) -> VSOut {
+        var vsOut: VSOut;
+        vsOut.vi = f32(vii);
+        vsOut.position = vec4f(0, 0, 0, 1);
+        return vsOut;
+    }
+
+    @fragment fn fs(vsOut: VSOut) -> @location(0) vec4f {
+        let vi = i32(vsOut.vi);
+        let y = vi / i32(resolution.x / ${sampleRate});
+        let x = vi - i32(resolution.x / ${sampleRate}) * y;
+        
+        let color = textureLoad(heatValTex, vec2i(x * ${sampleRate}, y * ${sampleRate}), 0);
+
+        return color; // 返回最小热力值
     }
 `
 
