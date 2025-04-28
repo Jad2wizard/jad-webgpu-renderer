@@ -167,6 +167,8 @@ class Renderer {
 		this.device.queue.submit([commandBuffer])
 
 		// await this.device.queue.onSubmittedWorkDone()
+		// for (let model of scene.modelList){
+		// }
 		// for (let model of scene.modelList) {
 		// 	if (model instanceof Heatmap) {
 		// 		await delay(50)
