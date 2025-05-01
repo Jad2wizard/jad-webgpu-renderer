@@ -11,7 +11,7 @@ type IProps = {
 const delay = (t = 1000) => new Promise((resolve) => setTimeout(resolve, t))
 
 class Renderer {
-	private outputCanvas: HTMLCanvasElement
+	private canvas: HTMLCanvasElement
 	private canvasCtx: GPUCanvasContext | null
 	private renderPassDescriptor: GPURenderPassDescriptor
 	private clearColor = [0, 0, 0, 0]
@@ -24,11 +24,11 @@ class Renderer {
 
 	resolutionBuf: GPUBuffer
 
-	constructor(props: IProps) {
-		this.outputCanvas = props.canvas
-		this.outputCanvas.width = this.outputCanvas.offsetWidth
-		this.outputCanvas.height = this.outputCanvas.offsetHeight
-		this.canvasCtx = this.outputCanvas.getContext('webgpu') || null
+	private constructor(props: IProps) {
+		this.canvas = props.canvas
+		this.canvas.width = this.canvas.offsetWidth
+		this.canvas.height = this.canvas.offsetHeight
+		this.canvasCtx = this.canvas.getContext('webgpu') || null
 		this._antialias = props.antiAlias || false
 		this._multisampleTexture = null
 		if (this._antialias) {
@@ -38,8 +38,17 @@ class Renderer {
 			throw 'your browser not supports WebGPU'
 		}
 		if (props.clearColor) this.clearColor = props.clearColor.slice()
+	}
 
-		this.initWebGPU(props)
+	static async create(props: IProps): Promise<Renderer | Error> {
+		const instance = new Renderer(props)
+		try {
+			await instance.initWebGPU(props)
+			return instance
+		} catch (e) {
+			console.error('WebGPU initialization failed', e)
+			return e
+		}
 	}
 
 	private async initWebGPU(props: IProps) {
@@ -92,11 +101,11 @@ class Renderer {
 	}
 
 	get width() {
-		return this.outputCanvas.width
+		return this.canvas.width
 	}
 
 	get height() {
-		return this.outputCanvas.height
+		return this.canvas.height
 	}
 
 	get antialias() {
@@ -136,11 +145,7 @@ class Renderer {
 	public async render(scene: Scene, camera: Camera) {
 		let wait = 0
 		while (!this.ready) {
-			await delay(20)
-			wait += 20
-			if (wait > 2000) {
-				throw 'WebGPU初始化失败'
-			}
+			throw new Error('Renderer not initialized. Call create() first')
 		}
 
 		// const s = new Date().valueOf()
@@ -181,8 +186,8 @@ class Renderer {
 
 	resize = () => {
 		if (!this.ready || !this.device) return
-		this.outputCanvas.width = this.outputCanvas.offsetWidth
-		this.outputCanvas.height = this.outputCanvas.offsetHeight
+		this.canvas.width = this.canvas.offsetWidth
+		this.canvas.height = this.canvas.offsetHeight
 		this.device.queue.writeBuffer(this.resolutionBuf, 0, new Float32Array([this.width, this.height]))
 		if (this._antialias) this.createMultisampleTexture()
 	}
