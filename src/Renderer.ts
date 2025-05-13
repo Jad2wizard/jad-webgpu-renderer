@@ -94,6 +94,10 @@ class Renderer {
 		this._ready = true
 		this.resize()
 		if (this._antialias) this.createMultisampleTexture()
+		this.device.lost.then((info) => {
+			console.error('WebGPU device lost', info.message)
+			this._ready = false
+		})
 	}
 
 	get ready() {
@@ -142,8 +146,7 @@ class Renderer {
 	 * @param camera
 	 * @param scene
 	 */
-	public async render(scene: Scene, camera: Camera) {
-		let wait = 0
+	public render(scene: Scene, camera: Camera) {
 		while (!this.ready) {
 			throw new Error('Renderer not initialized. Call create() first')
 		}

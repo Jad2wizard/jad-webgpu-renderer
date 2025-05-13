@@ -39,7 +39,7 @@ for (let i = 0; i < num; ++i) {
 //create Line model
 const line = new Line({
 	positions: pos,
-	material: { color: [0.0, 0.0, 1, 0.5], lineWidth: 10, blending: 'normalBlending' } //optional
+	material: { color: [0.0, 0.0, 1, 0.5], lineWidth: 10, blending: 'normalBlending' }, //optional
 })
 
 //create Points model
@@ -53,8 +53,8 @@ const points = new Points({
 		blending: 'normalBlending',
 		size: 25,
 		highlightSize: 40,
-		highlightColor: [1, 0, 0, 0.5]
-	}
+		highlightColor: [1, 0, 0, 0.5],
+	},
 })
 
 scene.addModel(points)
@@ -103,7 +103,7 @@ for (let i = 0; i < num; ++i) {
 
 const line = new Line({
 	positions: pos.map((p, i) => (i % 2 === 1 ? p * 1.3 : p)),
-	material: { color: [0.0, 0.9, 1, 0.7], lineWidth: 10, blending: 'normalBlending' }
+	material: { color: [0.0, 0.9, 1, 0.7], lineWidth: 10, blending: 'normalBlending' },
 })
 const points = new Points({
 	positions: pos.map((p, i) => (i % 2 === 1 ? p * 1.5 : p)),
@@ -114,14 +114,14 @@ const points = new Points({
 		blending: 'normalBlending',
 		// size: 10,
 		highlightSize: 40,
-		highlightColor: [1, 0, 0, 0.5]
-	}
+		highlightColor: [1, 0, 0, 0.5],
+	},
 })
 const heat = new Heatmap({
 	points: pos.map((p, i) => (i % 2 === 1 ? p * -1 : p * 0.9)),
 	material: {
-		radius: 40
-	}
+		radius: 40,
+	},
 })
 //@ts-ignore
 // window.h = heat
@@ -142,9 +142,10 @@ setTimeout(() => {
 
 ## TODO
 
--   [x] 测试vertex attribute 是否支持8位或16位长度的数值  
-         （支持uint8，sint8，float16等，但受限于js不支持Float16Array并且webgpu要求vertex buffer的arrayStride必须为4的整数倍，所以只能选择uint8x4或者sint8\*4）
--   [x] Model 添加 dispose 方法
--   [x] Model 添加 visible 属性并通过 visible 控制 Model 是否参与渲染
--   [x] Model 添加 renderOrder 属性，控制 Model 的渲染顺序
--   [x] Line Model 支持 line 图元渲染，并支持拖尾特效、按时间播放以及头部顶点
+## refactor
+
+-   [ ] 渲染器分层实现。geometry, material, model, scene, uniform, storage, attribute, texture 等只实现业务相关的逻辑，不实现包括 WebGPU API 调用等底层逻辑
+-   [ ] Renderer 中提供 render 等对外方法，不负责具体渲染逻辑的实现
+-   [ ] 新建WebGPUUtils、WebGPUPipelineUtils、WebGPUTextureUtils、WebGPUPipelineUtils, WebGPUBindingUtils 等工具类，负责处理 WebGPU API 调用等底层逻辑
+-   [ ] 新建 WebGPUBackend 类，负责整合 Utils 工具类，并提供具体的渲染实现的方法给 Renderer 类
+-   [ ] Buffer, BufferView 和 BufferPool等类的重新设计和实现
