@@ -139,3 +139,82 @@ export function convertHalfToFloatArray(data: Uint16Array): Float32Array {
 }
 
 console.log(packUint8ToUint32([1, 0, 0, 1]))
+
+/**
+ * 将前端常见的颜色格式转换为标准化的 RGBA 颜色值
+ * 每个分量的取值范围为 0 到 1
+ *
+ * @param color - 支持的颜色格式：
+ *   - 十六进制字符串: "#ff0000", "#f00", "ff0000", "f00"
+ *   - RGB/RGBA 字符串: "rgb(255, 0, 0)", "rgba(255, 0, 0, 1)"
+ *   - 数组格式: [255, 0, 0], [255, 0, 0, 255], [1, 0, 0, 1]
+ * @returns 标准化的 RGBA 颜色值 [r, g, b, a]，每个分量范围为 0-1
+ */
+export function normalizeColor(color: string | number[]): Color {
+	// 处理字符串格式
+	if (typeof color === 'string') {
+		const trimmed = color.trim().toLowerCase()
+
+		// 处理十六进制格式
+		if (trimmed.startsWith('#') || /^[0-9a-f]{3,8}$/i.test(trimmed)) {
+			let hex = trimmed.replace('#', '')
+
+			// 处理简写格式 (如 "f00" -> "ff0000")
+			if (hex.length === 3) {
+				hex = hex
+					.split('')
+					.map((char) => char + char)
+					.join('')
+			}
+
+			// 处理 4 位简写格式 (如 "f00a" -> "ff0000aa")
+			if (hex.length === 4) {
+				hex = hex
+					.split('')
+					.map((char) => char + char)
+					.join('')
+			}
+
+			const r = parseInt(hex.substring(0, 2), 16) / 255
+			const g = parseInt(hex.substring(2, 2), 16) / 255
+			const b = parseInt(hex.substring(4, 2), 16) / 255
+			const a = hex.length >= 8 ? parseInt(hex.substring(6, 2), 16) / 255 : 1
+
+			return [r, g, b, a]
+		}
+
+		// 处理 rgb/rgba 格式
+		const rgbMatch = trimmed.match(/rgba?\(\s*([^\)]+)\)/)
+		if (rgbMatch) {
+			const values = rgbMatch[1].split(',').map((v) => parseFloat(v.trim()))
+			const r = values[0] / 255
+			const g = values[1] / 255
+			const b = values[2] / 255
+			const a = values.length > 3 ? values[3] : 1
+			return [r, g, b, a]
+		}
+
+		throw new Error(`Unsupported color format: ${color}`)
+	}
+
+	// 处理数组格式
+	if (Array.isArray(color)) {
+		if (color.length < 3 || color.length > 4) {
+			throw new Error('Color array must have 3 or 4 elements')
+		}
+
+		let [r, g, b, a = 1] = color
+
+		// 检测是否为 0-255 范围的值
+		if (r > 1 || g > 1 || b > 1) {
+			r /= 255
+			g /= 255
+			b /= 255
+			if (a > 1) a /= 255
+		}
+
+		return [r, g, b, a]
+	}
+
+	throw new Error(`Unsupported color type: ${typeof color}`)
+}

@@ -1,5 +1,6 @@
 const path = require('path')
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin')
+const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin')
 
 module.exports = {
 	mode: 'development',
@@ -21,6 +22,14 @@ module.exports = {
 			},
 		],
 	},
+	plugins: [
+		new ForkTsCheckerWebpackPlugin({
+			async: false,
+			typescript: {
+				configFile: './tsconfig.json',
+			},
+		}),
+	],
 	devtool: 'inline-source-map',
 	devServer: {
 		static: './dist',

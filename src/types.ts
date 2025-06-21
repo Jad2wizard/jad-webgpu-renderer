@@ -15,10 +15,17 @@ export type Blending = 'normalBlending' | 'additiveBlending' | 'max' | 'min' | '
 
 export type Color = [number, number, number, number]
 
+export interface IBuffer {}
+
 export interface IRenderable {
 	prevRender(renderer: Renderer, encoder: GPUCommandEncoder, camera: Camera): void
 
-	render(renderer: Renderer, pass: GPURenderPassEncoder, camera: Camera, textures?: Record<string, GPUTexture>): void
+	render(
+		renderer: Renderer,
+		pass: GPURenderPassEncoder,
+		camera: Camera,
+		textures?: Record<string, GPUTexture>
+	): void
 
 	dispose(): void
 

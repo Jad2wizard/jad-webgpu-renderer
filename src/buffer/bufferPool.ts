@@ -33,11 +33,14 @@ class BufferPool {
 				bufferView.offset = buffer.size
 				if (bufferView.usedInUniform) {
 					buffer.size +=
-						Math.ceil(bufferView.size / minUniformBufferOffsetAlignment) * minUniformBufferOffsetAlignment
+						Math.ceil(bufferView.size / minUniformBufferOffsetAlignment) *
+						minUniformBufferOffsetAlignment
 				}
+
 				if (bufferView.usedInStorage) {
 					buffer.size +=
-						Math.ceil(bufferView.size / minStorageBufferOffsetAlignment) * minStorageBufferOffsetAlignment
+						Math.ceil(bufferView.size / minStorageBufferOffsetAlignment) *
+						minStorageBufferOffsetAlignment
 				}
 				buffer.bufferViews.push(bufferView)
 				return buffer
@@ -54,9 +57,13 @@ class BufferPool {
 		for (let bv of bufferViews) {
 			bv.offset = bufferSize
 			if (bv.usedInUniform)
-				bufferSize += Math.ceil(bv.size / minUniformBufferOffsetAlignment) * minUniformBufferOffsetAlignment
+				bufferSize +=
+					Math.ceil(bv.size / minUniformBufferOffsetAlignment) *
+					minUniformBufferOffsetAlignment
 			else if (bv.usedInStorage)
-				bufferSize += Math.ceil(bv.size / minStorageBufferOffsetAlignment) * minStorageBufferOffsetAlignment
+				bufferSize +=
+					Math.ceil(bv.size / minStorageBufferOffsetAlignment) *
+					minStorageBufferOffsetAlignment
 			else bufferSize += bv.size
 		}
 		const newBuffer = new Buffer({
@@ -89,9 +96,13 @@ class BufferPool {
 			for (let bv of bvs) {
 				bv.offset = bufferSize
 				if (bv.usedInUniform)
-					bufferSize += Math.ceil(bv.size / minUniformBufferOffsetAlignment) * minUniformBufferOffsetAlignment
+					bufferSize +=
+						Math.ceil(bv.size / minUniformBufferOffsetAlignment) *
+						minUniformBufferOffsetAlignment
 				else if (bv.usedInStorage)
-					bufferSize += Math.ceil(bv.size / minStorageBufferOffsetAlignment) * minStorageBufferOffsetAlignment
+					bufferSize +=
+						Math.ceil(bv.size / minStorageBufferOffsetAlignment) *
+						minStorageBufferOffsetAlignment
 				else bufferSize += bv.size
 			}
 			const buffer = new Buffer({

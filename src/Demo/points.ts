@@ -3,10 +3,6 @@ import PerspectiveCamera from '@/camera/perspectiveCamera'
 import Renderer from '../Renderer'
 import Scene from '../Scene'
 import Points from '../Points/Points'
-import { Paths } from '../Path/Paths'
-import Heatmap from '../Heatmap/Heatmap'
-import { times } from 'lodash'
-// import * as moment from 'moment'
 
 async function initApp() {
 	//@ts-ignore
@@ -24,7 +20,7 @@ async function initApp() {
 	const scene = new Scene()
 	//@ts-ignore
 	window.s = scene
-	const renderer = await Renderer.create({ canvas, antiAlias: true, clearColor: [0, 0, 0, 0.3] })
+	const renderer = await Renderer.create({ canvas, antialias: true, clearColor: [0, 0, 0, 0.3] })
 	// const renderer = await Renderer.create({ canvas, antiAlias: true, clearColor: [0, 0, 0, 0.3] })
 	//@ts-ignore
 	window.r = renderer

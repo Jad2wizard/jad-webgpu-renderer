@@ -1,142 +1,60 @@
 import Scene from './Scene'
 import { Camera } from './camera/camera'
+import { WebGPUBackend } from './backend'
 
 type IProps = {
 	canvas: HTMLCanvasElement
-	antiAlias?: boolean
+	antialias?: boolean
 	clearColor?: [number, number, number, number]
 	deviceLimits?: GPUDeviceDescriptor['requiredLimits']
 }
 
-const delay = (t = 1000) => new Promise((resolve) => setTimeout(resolve, t))
-
 class Renderer {
-	private canvas: HTMLCanvasElement
-	private canvasCtx: GPUCanvasContext | null
-	private renderPassDescriptor: GPURenderPassDescriptor
-	private clearColor = [0, 0, 0, 0]
-	private _ready = false
-	private _multisampleTexture: GPUTexture | null
-	private _antialias: boolean
-
-	public device: GPUDevice
-	public presentationFormat: GPUTextureFormat
-
-	resolutionBuf: GPUBuffer
+	private ready = false
+	private backend: WebGPUBackend
 
 	private constructor(props: IProps) {
-		this.canvas = props.canvas
-		this.canvas.width = this.canvas.offsetWidth
-		this.canvas.height = this.canvas.offsetHeight
-		this.canvasCtx = this.canvas.getContext('webgpu') || null
-		this._antialias = props.antiAlias || false
-		this._multisampleTexture = null
-		if (this._antialias) {
-			this.createMultisampleTexture()
-		}
-		if (!this.canvasCtx) {
-			throw 'your browser not supports WebGPU'
-		}
-		if (props.clearColor) this.clearColor = props.clearColor.slice()
+		this.backend = new WebGPUBackend(props.canvas, props)
 	}
 
-	static async create(props: IProps): Promise<Renderer | Error> {
+	static async create(props: IProps): Promise<Renderer> {
 		const instance = new Renderer(props)
 		try {
-			await instance.initWebGPU(props)
+			await instance.backend.init()
+			instance.ready = true
 			return instance
 		} catch (e) {
-			console.error('WebGPU initialization failed', e)
-			return e
+			instance.ready = false
+			throw 'WebGPU initialization failed' + e
 		}
-	}
-
-	private async initWebGPU(props: IProps) {
-		const adapter = await navigator.gpu?.requestAdapter()
-		const device = await adapter?.requestDevice({
-			requiredLimits: {
-				//设置单个buffer上限为800MB，略大于一亿个点的坐标Float32Array大小
-				maxBufferSize: 800 * 1024 * 1024,
-				maxStorageBufferBindingSize: 800 * 1024 * 1024,
-				...props.deviceLimits,
-			},
-		})
-		if (!device) {
-			throw 'your browser not supports WebGPU'
-		}
-		this.device = device
-		//@ts-ignore
-		window.r = this
-		if (!this.canvasCtx) {
-			throw 'your browser not supports WebGPU'
-		}
-		this.presentationFormat = navigator.gpu.getPreferredCanvasFormat()
-		this.canvasCtx.configure({
-			device,
-			format: this.presentationFormat,
-			alphaMode: 'premultiplied',
-		})
-		this.renderPassDescriptor = {
-			label: 'render pass',
-			colorAttachments: [
-				{
-					view: this.canvasCtx.getCurrentTexture().createView(),
-					clearValue: this.clearColor,
-					loadOp: 'clear',
-					storeOp: 'store',
-				},
-			],
-		}
-		this.resolutionBuf = device.createBuffer({
-			size: 2 * 4,
-			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		})
-		this._ready = true
-		this.resize()
-		if (this._antialias) this.createMultisampleTexture()
-		this.device.lost.then((info) => {
-			console.error('WebGPU device lost', info.message)
-			this._ready = false
-		})
-	}
-
-	get ready() {
-		return this._ready
 	}
 
 	get width() {
-		return this.canvas.width
+		return this.backend.getWidth
 	}
 
 	get height() {
-		return this.canvas.height
+		return this.backend.getHeight
+	}
+
+	get device() {
+		return this.backend.getDevice()
+	}
+
+	get presentationFormat() {
+		return this.backend.getPresentationFormat()
+	}
+
+	get resolutionBuf() {
+		return this.backend.getResolutionBuffer()
 	}
 
 	get antialias() {
-		return this._antialias
+		return this.backend.getAntialias()
 	}
 
-	set antialias(v: boolean) {
-		this._antialias = v
-		if (v) this.createMultisampleTexture()
-		else if (this._multisampleTexture) this._multisampleTexture.destroy()
-	}
-
-	private updateRenderPassDescriptor(renderTarget?: GPUTexture) {
-		if (!this.canvasCtx) return
-		const colorAttachment = (this.renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0]
-		if (!renderTarget) {
-			if (!this._antialias) {
-				colorAttachment.view = this.canvasCtx.getCurrentTexture().createView()
-				colorAttachment.resolveTarget = undefined
-			} else if (this._multisampleTexture) {
-				colorAttachment.view = this._multisampleTexture?.createView()
-				colorAttachment.resolveTarget = this.canvasCtx.getCurrentTexture().createView()
-			}
-		} else {
-			colorAttachment.view = renderTarget.createView()
-			colorAttachment.resolveTarget = undefined
-		}
+	resize = () => {
+		this.backend.resize()
 	}
 
 	/**
@@ -147,64 +65,10 @@ class Renderer {
 	 * @param scene
 	 */
 	public render(scene: Scene, camera: Camera) {
-		while (!this.ready) {
+		if (!this.ready) {
 			throw new Error('Renderer not initialized. Call create() first')
 		}
-
-		// const s = new Date().valueOf()
-		if (!this.device || !this.canvasCtx) return
-		camera.updateMatrixBuffers(this.device)
-		const { device, renderPassDescriptor } = this
-
-		this.updateRenderPassDescriptor()
-
-		const encoder = device.createCommandEncoder()
-
-		for (let model of scene.modelList) {
-			model.prevRender(this, encoder, camera)
-		}
-
-		const pass = encoder.beginRenderPass(renderPassDescriptor)
-		for (let model of scene.modelList) {
-			if (model.visible) model.render(this, pass, camera)
-		}
-
-		pass.end()
-
-		const commandBuffer = encoder.finish()
-		this.device.queue.submit([commandBuffer])
-
-		// await this.device.queue.onSubmittedWorkDone()
-		// for (let model of scene.modelList){
-		// }
-		// for (let model of scene.modelList) {
-		// 	if (model instanceof Heatmap) {
-		// 		await delay(50)
-		// 		await model.setMaxMinHeatValue(this, 'max')
-		// 		await model.setMaxMinHeatValue(this, 'min')
-		// 	}
-		// }
-		// console.log(new Date().valueOf() - s)
-	}
-
-	resize = () => {
-		if (!this.ready || !this.device) return
-		this.canvas.width = this.canvas.offsetWidth
-		this.canvas.height = this.canvas.offsetHeight
-		this.device.queue.writeBuffer(this.resolutionBuf, 0, new Float32Array([this.width, this.height]))
-		if (this._antialias) this.createMultisampleTexture()
-	}
-
-	private createMultisampleTexture() {
-		if (!this.canvasCtx || !this.device) return
-		if (this._multisampleTexture) this._multisampleTexture.destroy()
-		const outputCanvavTexture = this.canvasCtx.getCurrentTexture()
-		this._multisampleTexture = this.device.createTexture({
-			format: outputCanvavTexture.format,
-			usage: GPUTextureUsage.RENDER_ATTACHMENT,
-			size: [outputCanvavTexture.width, outputCanvavTexture.height],
-			sampleCount: 4, //MSAA webgpu只支持采样率为1或者4的多重采样
-		})
+		this.backend.render(scene, camera, this)
 	}
 }
 

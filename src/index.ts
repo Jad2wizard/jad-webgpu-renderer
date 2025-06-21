@@ -2,8 +2,8 @@ import Renderer from './Renderer'
 import Scene from './Scene'
 import Model from './Model'
 import Points from './Points/Points'
-import Heatmap from './Heatmap/Heatmap'
-import { Paths } from './Path/Paths'
+// import Heatmap from './Heatmap/Heatmap'
+// import { Paths } from './Path/Paths'
 import { Camera } from './camera/camera'
 import PerspectiveCamera from './camera/perspectiveCamera'
 import OrthographicCamera from './camera/orthographicCamera'
@@ -21,8 +21,8 @@ export {
 	OrthographicCamera,
 	Model,
 	Points,
-	Paths,
-	Heatmap,
+	// Paths,
+	// Heatmap,
 	Material,
 	Uniform,
 	Storage,
