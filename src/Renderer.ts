@@ -53,6 +53,14 @@ class Renderer {
 		return this.backend.getAntialias()
 	}
 
+	get webgpuBackend() {
+		return this.backend
+	}
+
+	get context() {
+		return this.backend.getContext()
+	}
+
 	resize = () => {
 		this.backend.resize()
 	}

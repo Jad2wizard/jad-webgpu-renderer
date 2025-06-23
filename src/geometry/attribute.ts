@@ -1,7 +1,8 @@
 /* eslint-disable no-undef */
-import BufferView from '@/buffer/bufferView'
-import { TypedArray } from '../types'
-import BufferPool from '@/buffer/bufferPool'
+import { genId } from '@/utils'
+import { TypedArray } from '@/types'
+import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
+import { WebGPUBackend } from '@/backend'
 
 type Options = {
 	shaderLocation?: number
@@ -13,9 +14,10 @@ class Attribute {
 	private _name: string
 	private _array: TypedArray
 	private _itemSize: number
-	private _bufferView: BufferView
+	private _buffer: WebGPUBuffer | null = null
 	private _shaderLocation?: number
 	private _stepMode: GPUVertexStepMode = 'vertex'
+	private _needsUpdate = true
 
 	constructor(name: string, data: TypedArray, itemSize: number, options?: Options) {
 		this._name = name
@@ -23,23 +25,15 @@ class Attribute {
 		this._itemSize = itemSize
 		this._shaderLocation = options?.shaderLocation
 		if (options?.stepMode) this._stepMode = options.stepMode
-		this._bufferView = new BufferView({
-			resourceName: 'attribute_' + this._name,
-			offset: 0,
-			size: options?.capacity ? options.capacity * this._array.BYTES_PER_ELEMENT : this._array.byteLength,
-			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-		})
-		if (options?.capacity) {
-			this.reallocate(options.capacity)
-		}
+		// Buffer 将在 updateBuffer 时创建
 	}
 
 	get needsUpdate() {
-		return this._bufferView.needsUpdate
+		return this._needsUpdate
 	}
 
 	set needsUpdate(v: boolean) {
-		this._bufferView.needsUpdate = v
+		this._needsUpdate = v
 	}
 
 	get name() {
@@ -75,15 +69,28 @@ class Attribute {
 		this._itemSize = Math.floor(v)
 	}
 
-	get bufferView() {
-		return this._bufferView
+	get buffer() {
+		return this._buffer
 	}
 
-	public updateBuffer(device: GPUDevice, bufferPool: BufferPool) {
-		if (this.needsUpdate) {
-			const res = this.bufferView.updateBuffer(device, this._array, bufferPool)
-			if (res) this.needsUpdate = false
+	public updateBuffer(backend: WebGPUBackend) {
+		if (this.needsUpdate && this._array) {
+			if (!this._buffer) {
+				// 创建新的 buffer
+				this._buffer = backend.createBuffer({
+					type: BufferType.VERTEX,
+					resourceName: 'attribute_' + this._name,
+					size: this._array.byteLength,
+					initialData: this._array.buffer
+				})
+			} else {
+				// 更新现有 buffer
+				backend.updateBuffer(this._buffer, this._array.buffer)
+			}
+			this.needsUpdate = false
+			return true
 		}
+		return false
 	}
 
 	public getFormat() {
@@ -104,7 +111,10 @@ class Attribute {
 	public dispose() {
 		//@ts-ignore
 		this._array = undefined
-		this._bufferView.dispose()
+		if (this._buffer) {
+			// Buffer 的销毁由 BufferManager 统一管理
+			this._buffer = null
+		}
 	}
 }
 

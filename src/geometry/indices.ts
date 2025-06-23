@@ -1,52 +1,65 @@
-import BufferPool from '@/buffer/bufferPool'
-import BufferView from '@/buffer/bufferView'
+import { TypedArray } from '@/types'
+import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
+import { WebGPUBackend } from '@/backend'
 
 class Index {
-	private _array: Uint32Array
-	private _bufferView: BufferView
+	private _array: TypedArray
+	private _buffer: WebGPUBuffer | null = null
+	private _needsUpdate = true
 
-	constructor(data: Uint32Array) {
+	constructor(data: TypedArray) {
 		this._array = data
-		this._bufferView = new BufferView({
-			resourceName: 'vertex index',
-			offset: 0,
-			size: data.byteLength,
-			usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-		})
+		// Buffer 将在 updateBuffer 时创建
 	}
 
 	get needsUpdate() {
-		return this._bufferView.needsUpdate
+		return this._needsUpdate
 	}
 
 	set needsUpdate(v: boolean) {
-		this._bufferView.needsUpdate = v
+		this._needsUpdate = v
 	}
 
 	get array() {
 		return this._array
 	}
 
-	set array(value: Uint32Array) {
+	set array(value: TypedArray) {
 		this._array = value
 		this.needsUpdate = true
 	}
 
-	get bufferView() {
-		return this._bufferView
+	get buffer() {
+		return this._buffer
 	}
 
-	public updateBuffer(device: GPUDevice, bufferPool: BufferPool) {
-		if (this.needsUpdate) {
-			const res = this.bufferView.updateBuffer(device, this._array, bufferPool)
-			if (res) this.needsUpdate = false
+	public updateBuffer(backend: WebGPUBackend) {
+		if (this.needsUpdate && this._array) {
+			if (!this._buffer) {
+				// 创建新的 buffer
+				this._buffer = backend.createBuffer({
+					type: BufferType.INDEX,
+					resourceName: 'index',
+					size: this._array.byteLength,
+					initialData: this._array.buffer
+				})
+			} else {
+				// 更新现有 buffer
+				backend.updateBuffer(this._buffer, this._array.buffer)
+			}
+			this.needsUpdate = false
+			return true
 		}
+		return false
 	}
 
 	public dispose() {
 		//@ts-ignore
 		this._array = undefined
-		this._bufferView.dispose()
+		if (this._buffer) {
+			// Buffer 的销毁由 BufferManager 统一管理
+			this._buffer = null
+		}
 	}
 }
 

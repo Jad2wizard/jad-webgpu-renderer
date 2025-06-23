@@ -70,8 +70,8 @@ async function initApp() {
 			points.appendPoints({
 				position: pos.subarray(i * 2, (i + step) * 2),
 				// startTime: timestamps.subarray(i, i + 50),
-				color: color.subarray(i * 4, (i + step) * 4),
-				radius: size.subarray(i, i + step),
+				// color: color.subarray(i * 4, (i + step) * 4),
+				// radius: size.subarray(i, i + step),
 			})
 		}
 		i += step

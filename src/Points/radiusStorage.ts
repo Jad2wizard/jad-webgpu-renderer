@@ -13,6 +13,8 @@ export const transformRadiusArray = (data: Uint8Array | { value: number; total: 
 			const v = data.value
 			radiuses[i] = packUint8ToUint32([v, v, v, v])
 		} else {
+			// 修复：data数组中每个元素都是一个radius值，将4个连续的radius值打包成一个uint32
+			// 例如：data[0,1,2,3] -> radiuses[0], data[4,5,6,7] -> radiuses[1]
 			radiuses[i] = packUint8ToUint32([
 				data[i * 4 + 0] || 0,
 				data[i * 4 + 1] || 0,
@@ -29,17 +31,27 @@ export const transformRadiusArray = (data: Uint8Array | { value: number; total: 
  *  故将散点的半径attribute 数据存放在 storage 中，并将四个相邻散点的 radius 合并到一个 uint32中
  */
 class RadiusStorage extends Storage {
+	private _hasRealData: boolean
+
 	constructor(props: IProps) {
-		const radiusUint32Array = props.data ? transformRadiusArray(props.data) : undefined
+		let radiusUint32Array: Uint32Array | undefined
+		const hasRealData = !!props.data
+		if (props.data) {
+			radiusUint32Array = transformRadiusArray(props.data)
+		} else {
+			// 当没有数据时，创建一个最小的有效数组以避免 WebGPU 绑定组错误
+			radiusUint32Array = new Uint32Array(1)
+		}
 		console.log(radiusUint32Array)
 		super({ name: 'radius', value: radiusUint32Array })
+		this._hasRealData = hasRealData
 		if (props.total && props.data && props.data.length < props.total) {
 			this.reallocate(props.total)
 		}
 	}
 
 	get hasData() {
-		return !!this._value
+		return this._hasRealData
 	}
 
 	getPointRadius(index: number) {
@@ -49,7 +61,12 @@ class RadiusStorage extends Storage {
 		return unpackUint32ToUint8(this.value[i])[offset]
 	}
 
-	updatePointsRadius(radius: number | number[], defaultRadius: number, total: number, pointIndices: number[]) {
+	updatePointsRadius(
+		radius: number | number[],
+		defaultRadius: number,
+		total: number,
+		pointIndices: number[]
+	) {
 		if (!this.value) {
 			const uint32Arr = transformRadiusArray({ value: defaultRadius, total })
 			this.updateValue(uint32Arr)
@@ -70,10 +87,10 @@ class RadiusStorage extends Storage {
 		if (!this._value) return
 		const sizeInUin32 = Math.ceil(size / 4)
 		//@ts-ignore
-		const newValue = new this._value.constructor(sizeInUin32) as typeof this._array
+		const newValue = new this._value.constructor(sizeInUin32) as typeof this._value
 		newValue.set(this._value.subarray(0, sizeInUin32))
 		this._value = newValue
-		this._bufferView.size = newValue.byteLength
+		// Buffer 大小调整将在下次 updateBuffer 时处理
 		this.needsUpdate = true
 	}
 

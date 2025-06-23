@@ -1,15 +1,15 @@
-import BufferView from '@/buffer/bufferView'
 import Attribute from './attribute'
 import Index from './indices'
 import { Group } from '@/types'
-import BufferPool from '@/buffer/bufferPool'
+import { WebGPUBuffer } from '@/backend/WebGPUBuffer'
+import { WebGPUBackend } from '@/backend'
 
 class Geometry {
 	private _group?: Group
 	private attributes: Record<string, Attribute>
 	private _vertexCount = -1
 	private _instanceCount = -1
-	private index: Index | null = null
+	public index: Index | null = null
 
 	constructor() {
 		this.attributes = {}
@@ -85,10 +85,10 @@ class Geometry {
 		return this.index?.array || null
 	}
 
-	public getIndexBufferView(device: GPUDevice, bufferPool: BufferPool) {
-		if (!this.index) return
-		this.index.updateBuffer(device, bufferPool)
-		return this.index.bufferView
+	public getIndexBuffer(backend: WebGPUBackend): WebGPUBuffer | null {
+		if (!this.index) return null
+		this.index.updateBuffer(backend)
+		return this.index.buffer
 	}
 
 	public getVertexBufferLayout() {
@@ -115,20 +115,35 @@ class Geometry {
 		return Object.values(this.attributes)
 	}
 
-	public getBufferViews() {
-		const res: BufferView[] = []
-		for (let an in this.attributes) res.push(this.attributes[an].bufferView)
-		if (this.index) res.push(this.index.bufferView)
+	public getBuffers(backend: WebGPUBackend): WebGPUBuffer[] {
+		const res: WebGPUBuffer[] = []
+		// 更新所有 attribute buffers
+		for (let an in this.attributes) {
+			this.attributes[an].updateBuffer(backend)
+			if (this.attributes[an].buffer) {
+				res.push(this.attributes[an].buffer!)
+			}
+		}
+		// 更新 index buffer
+		if (this.index) {
+			this.index.updateBuffer(backend)
+			if (this.index.buffer) {
+				res.push(this.index.buffer)
+			}
+		}
 		return res
 	}
 
-	public updateVertexBufferViewList(device: GPUDevice, bufferPool: BufferPool) {
-		const bufferViewList: BufferView[] = []
-		for (let attribute of Object.values(this.attributes)) {
-			attribute.updateBuffer(device, bufferPool)
-			if (attribute.bufferView?.GPUBuffer) bufferViewList.push(attribute.bufferView)
+	public updateVertexBuffers(backend: WebGPUBackend): WebGPUBuffer[] {
+		const buffers: WebGPUBuffer[] = []
+		for (let an in this.attributes) {
+			const attribute = this.attributes[an]
+			attribute.updateBuffer(backend)
+			if (attribute.buffer?.GPUBuffer) {
+				buffers.push(attribute.buffer)
+			}
 		}
-		return bufferViewList
+		return buffers
 	}
 
 	public dispose() {

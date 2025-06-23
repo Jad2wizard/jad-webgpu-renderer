@@ -1,12 +1,12 @@
 import { ShaderDataDefinitions, makeShaderDataDefinitions } from 'webgpu-utils'
-import BufferPool from '@/buffer/bufferPool'
 import { Blending } from '../types'
 import Renderer from '../Renderer'
 import { TypedArray } from '../types'
 import { Camera } from '@/camera/camera'
 import Uniform from './uniform'
 import Storage from './storage'
-import BufferView from '@/buffer/bufferView'
+import { WebGPUBuffer } from '@/backend/WebGPUBuffer'
+import { WebGPUBackend } from '@/backend'
 
 type IProps = {
 	id: string
@@ -153,16 +153,20 @@ class Material {
 		storage.updateValue(value)
 	}
 
-	public getBufferViews() {
-		const res: BufferView[] = []
+	public getBuffers(backend: WebGPUBackend): WebGPUBuffer[] {
+		const res: WebGPUBuffer[] = []
 		for (let un in this.uniforms) {
 			if (['projectionMatrix', 'viewMatrix', 'resolution'].includes(un)) continue
-			const bv = this.uniforms[un].bufferView
-			if (!res.find((b) => b.id === bv.id)) res.push(bv)
+			this.uniforms[un].updateBuffer(backend)
+			if (this.uniforms[un].buffer && !res.find((b) => b.id === this.uniforms[un].buffer!.id)) {
+				res.push(this.uniforms[un].buffer!)
+			}
 		}
 		for (let sn in this.storages) {
-			const bv = this.storages[sn].bufferView
-			if (!res.find((b) => b.id === bv.id)) res.push(bv)
+			this.storages[sn].updateBuffer(backend)
+			if (this.storages[sn].buffer && !res.find((b) => b.id === this.storages[sn].buffer!.id)) {
+				res.push(this.storages[sn].buffer!)
+			}
 		}
 		return res
 	}
@@ -253,7 +257,7 @@ class Material {
 	public getBindGroups(
 		renderer: Renderer,
 		camera: Camera,
-		bufferPool: BufferPool,
+		backend: WebGPUBackend,
 		textures: Record<string, GPUTexture>
 	): { bindGroups: GPUBindGroup[]; groupIndexList: number[] } {
 		if (!this.pipeline) return { bindGroups: [], groupIndexList: [] }
@@ -275,33 +279,46 @@ class Material {
 				if (uniform.group !== index) continue
 				let buffer: GPUBuffer | null = null
 				if (uniform.name === 'projectionMatrix') {
-					buffer = camera.getProjectionMatBuf(device)
-				} else if (uniform.name === 'viewMatrix') {
-					buffer = camera.getViewMatBuf(device)
-				} else if (uniform.name === 'resolution') {
-					buffer = renderer.resolutionBuf
-				} else {
-					if (uniform.needsUpdate) uniform.updateBuffer(device, bufferPool)
-					buffer = uniform.bufferView?.GPUBuffer || null
-					// console.log(buffer?.label)
-				}
-				if (!buffer) continue
+				buffer = camera.getProjectionMatBuf(device)
 				entries.push({
 					binding: uniform.binding,
-					resource: { buffer, offset: uniform.bufferView.offset, size: uniform.size },
+					resource: { buffer, offset: 0, size: uniform.size },
 				})
+			} else if (uniform.name === 'viewMatrix') {
+				buffer = camera.getViewMatBuf(device)
+				entries.push({
+					binding: uniform.binding,
+					resource: { buffer, offset: 0, size: uniform.size },
+				})
+			} else if (uniform.name === 'resolution') {
+				buffer = renderer.resolutionBuf
+				entries.push({
+					binding: uniform.binding,
+					resource: { buffer, offset: 0, size: uniform.size },
+				})
+			} else {
+				if (uniform.needsUpdate) uniform.updateBuffer(backend)
+				buffer = uniform.buffer?.GPUBuffer || null
+				if (buffer) {
+					entries.push({
+						binding: uniform.binding,
+						resource: { buffer, offset: 0, size: uniform.size },
+					})
+				}
+			}
 			}
 			for (let sn in this.storages) {
-				const storage = this.storages[sn]
-				if (storage.group !== index) continue
-				if (storage.needsUpdate) storage.updateBuffer(device, bufferPool)
-				const buffer = storage.bufferView?.GPUBuffer
-				if (!buffer) continue
+			const storage = this.storages[sn]
+			if (storage.group !== index) continue
+			if (storage.needsUpdate) storage.updateBuffer(backend)
+			const buffer = storage.buffer?.GPUBuffer
+			if (buffer) {
 				entries.push({
 					binding: storage.binding,
-					resource: { buffer, offset: storage.bufferView.offset, size: storage.size },
+					resource: { buffer, offset: 0, size: storage.size },
 				})
 			}
+		}
 			for (let tn in this.textureInfos) {
 				const { group, binding } = this.textureInfos[tn]
 				if (group !== index) continue
@@ -316,8 +333,6 @@ class Material {
 	}
 
 	public dispose() {
-		//@ts-ignore
-		this.bufferPool = undefined
 		for (let un in this.uniforms) {
 			this.uniforms[un].dispose()
 		}

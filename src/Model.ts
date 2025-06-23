@@ -1,10 +1,10 @@
 import { Camera } from './camera/camera'
-import BufferPool from './buffer/bufferPool'
 import Renderer from './Renderer'
 import Geometry from './geometry/geometry'
 import Material from './material/material'
 import { IRenderable, TypedArray } from '@/types'
 import { genId, indexFormat } from './utils'
+import { WebGPUBackend } from '@/backend'
 
 type Options = {}
 
@@ -14,7 +14,6 @@ class Model implements IRenderable {
 	protected _material: Material
 	protected _visible: boolean
 	protected _renderOrder: number
-	protected _bufferPool = new BufferPool()
 	protected _style: any = {}
 	protected textures: Record<string, GPUTexture> = {}
 
@@ -50,15 +49,6 @@ class Model implements IRenderable {
 		this._material = mat
 	}
 
-	get bufferPool() {
-		return this._bufferPool
-	}
-
-	set bufferPool(bp: BufferPool) {
-		if (this._bufferPool) this._bufferPool.dispose()
-		this._bufferPool = bp
-	}
-
 	get visible() {
 		return this._visible
 	}
@@ -80,11 +70,8 @@ class Model implements IRenderable {
 		this.textures[tn] = texture
 	}
 
-	public prevRender(renderer: Renderer, encoder: GPUCommandEncoder, camera: Camera) {}
-
-	private initBufferPool(device: GPUDevice) {
-		const { material, geometry } = this
-		this.bufferPool.createBuffers(device, [...material.getBufferViews(), ...geometry.getBufferViews()])
+	public prevRender(renderer: Renderer, encoder: GPUCommandEncoder, camera: Camera): void {
+		// 预渲染逻辑，如果需要的话
 	}
 
 	public getAttribute(k: string) {
@@ -105,43 +92,47 @@ class Model implements IRenderable {
 		pass: GPURenderPassEncoder,
 		camera: Camera,
 		textures?: Record<string, GPUTexture>
-	) {
-		const { geometry, material } = this
-		const { device } = renderer
-		if (!this.bufferPool.initialed) this.initBufferPool(device)
-		const vertexBufferLayouts = geometry.getVertexBufferLayout()
-		const vertexBufferViewList = geometry.updateVertexBufferViewList(device, this.bufferPool)
-
-		const pipeline = material.getPipeline(renderer, vertexBufferLayouts)
-		if (!pipeline) return
+	): void {
+		if (!this.visible) return
+		const backend = renderer.webgpuBackend as WebGPUBackend
+		const { material, geometry } = this
+		const pipeline = material.getPipeline(renderer, geometry.getVertexBufferLayout())
 		const { bindGroups, groupIndexList } = material.getBindGroups(
 			renderer,
 			camera,
-			this.bufferPool,
-			textures || this.textures
+			backend,
+			this.textures
 		)
-		pass.setPipeline(pipeline)
-		for (let i = 0; i < bindGroups.length; ++i) {
+
+		// 设置管线
+		if (pipeline) {
+			pass.setPipeline(pipeline)
+		}
+		for (let i = 0; i < groupIndexList.length; i++) {
 			pass.setBindGroup(groupIndexList[i], bindGroups[i])
 		}
-		for (let i = 0; i < vertexBufferViewList.length; ++i) {
-			const bv = vertexBufferViewList[i]
-			pass.setVertexBuffer(i, bv.GPUBuffer, bv.offset, bv.size)
+
+		// 更新并设置顶点缓冲区
+		const vertexBuffers = geometry.updateVertexBuffers(backend)
+		for (let i = 0; i < vertexBuffers.length; i++) {
+			const buffer = vertexBuffers[i]
+			pass.setVertexBuffer(i, buffer.GPUBuffer!)
 		}
-		const indexBufferView = geometry.getIndexBufferView(device, this._bufferPool)
-		if (indexBufferView?.GPUBuffer) {
-			pass.setIndexBuffer(indexBufferView.GPUBuffer, indexFormat, indexBufferView.offset, indexBufferView.size)
+		const indexBuffer = geometry.getIndexBuffer(backend)
+		if (indexBuffer && geometry.index) {
+			pass.setIndexBuffer(
+				indexBuffer.GPUBuffer!,
+				indexFormat as GPUIndexFormat
+			)
+			pass.drawIndexed(geometry.index.array.length, geometry.instanceCount)
+		} else {
+			pass.draw(geometry.vertexCount, geometry.instanceCount)
 		}
-		const instanceCount = geometry.instanceCount > -1 ? geometry.instanceCount : undefined
-		const index = geometry.getIndex()
-		if (index) pass.drawIndexed(index.length, instanceCount)
-		else pass.draw(geometry.vertexCount, instanceCount)
 	}
 
 	public dispose() {
 		this._geometry.dispose()
 		this._material.dispose()
-		this.bufferPool.dispose()
 		for (let tid in this.textures) {
 			this.textures[tid].destroy()
 		}

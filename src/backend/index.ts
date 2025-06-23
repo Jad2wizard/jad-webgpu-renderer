@@ -57,9 +57,7 @@ export class WebGPUBackend {
 		return this.format
 	}
 
-	getContext() {
-		return this.context
-	}
+
 
 	getRenderPassDescriptor(renderTarget?: GPUTexture) {
 		this.updateRenderPassDescriptor(renderTarget)
@@ -370,5 +368,12 @@ export class WebGPUBackend {
 			}
 		}
 		return this.bufferManager.getBufferStats()
+	}
+
+	/**
+	 * 获取 Canvas Context
+	 */
+	getContext(): GPUCanvasContext {
+		return this.context
 	}
 }

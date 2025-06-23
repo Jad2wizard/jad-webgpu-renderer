@@ -1,7 +1,8 @@
 /* eslint-disable no-undef */
-import BufferPool from '@/buffer/bufferPool'
-import BufferView from '@/buffer/bufferView'
+import { genId } from '@/utils'
 import { makeStructuredView, StructuredView, VariableDefinition } from 'webgpu-utils'
+import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
+import { WebGPUBackend } from '@/backend'
 
 export type IProps = {
 	name: string
@@ -14,7 +15,8 @@ class Uniform {
 	protected def: VariableDefinition
 	protected view: StructuredView
 	protected _value: any
-	protected _bufferView: BufferView
+	protected _buffer: WebGPUBuffer | null = null
+	protected _needsUpdate = true
 
 	constructor(props: IProps) {
 		this._name = props.name
@@ -22,12 +24,7 @@ class Uniform {
 		this._value = props.value
 		this.view = makeStructuredView(this.def)
 		this.view.set(props.value)
-		this._bufferView = new BufferView({
-			resourceName: this._name,
-			offset: 0,
-			size: this.view.arrayBuffer.byteLength,
-			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		})
+		// Buffer 将在 updateBuffer 时创建
 	}
 
 	get name() {
@@ -47,19 +44,19 @@ class Uniform {
 	}
 
 	get size() {
-		return this._bufferView.size
+		return this.view.arrayBuffer.byteLength
 	}
 
-	get bufferView() {
-		return this._bufferView
+	get buffer() {
+		return this._buffer
 	}
 
 	get needsUpdate() {
-		return this._bufferView.needsUpdate
+		return this._needsUpdate
 	}
 
 	set needsUpdate(v: boolean) {
-		this._bufferView.needsUpdate = v
+		this._needsUpdate = v
 	}
 
 	public updateValue(value: any) {
@@ -68,15 +65,31 @@ class Uniform {
 		this.needsUpdate = true
 	}
 
-	public updateBuffer(device: GPUDevice, bufferPool: BufferPool) {
+	public updateBuffer(backend: WebGPUBackend) {
 		if (this.needsUpdate && this.view.arrayBuffer) {
-			const res = this.bufferView.updateBuffer(device, this.view.arrayBuffer, bufferPool)
-			if (res) this.needsUpdate = false
+			if (!this._buffer) {
+				// 创建新的 buffer
+				this._buffer = backend.createBuffer({
+					type: BufferType.UNIFORM,
+					resourceName: this._name,
+					size: this.view.arrayBuffer.byteLength,
+					initialData: this.view.arrayBuffer
+				})
+			} else {
+				// 更新现有 buffer
+				backend.updateBuffer(this._buffer, this.view.arrayBuffer)
+			}
+			this.needsUpdate = false
+			return true
 		}
+		return false
 	}
 
 	dispose() {
-		this.bufferView.dispose()
+		if (this._buffer) {
+			// Buffer 的销毁由 BufferManager 统一管理
+			this._buffer = null
+		}
 		this._value = undefined
 	}
 }
