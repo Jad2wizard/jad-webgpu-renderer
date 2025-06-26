@@ -55,7 +55,7 @@ class RadiusStorage extends Storage {
 	}
 
 	getPointRadius(index: number) {
-		if (!this.value) return undefined
+		if (!this.hasData) return undefined
 		const i = Math.floor(index / 4)
 		const offset = index % 4
 		return unpackUint32ToUint8(this.value[i])[offset]
@@ -67,7 +67,7 @@ class RadiusStorage extends Storage {
 		total: number,
 		pointIndices: number[]
 	) {
-		if (!this.value) {
+		if (!this.hasData) {
 			const uint32Arr = transformRadiusArray({ value: defaultRadius, total })
 			this.updateValue(uint32Arr)
 		}
@@ -84,7 +84,7 @@ class RadiusStorage extends Storage {
 	}
 
 	reallocate(size: number) {
-		if (!this._value) return
+		if (!this.hasData) return
 		const sizeInUin32 = Math.ceil(size / 4)
 		//@ts-ignore
 		const newValue = new this._value.constructor(sizeInUin32) as typeof this._value
@@ -95,7 +95,7 @@ class RadiusStorage extends Storage {
 	}
 
 	appendData(radiusArray8: Uint8Array, appendLen: number, start: number) {
-		if (!this.value) return
+		if (!this.hasData) return
 		const si = Math.floor(start / 4)
 		const sj = start % 4
 		let offset = 0
