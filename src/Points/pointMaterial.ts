@@ -4,6 +4,7 @@ import { getShaderCode } from '../material/shaders/points'
 import RadiusStorage from './radiusStorage'
 
 export type IProps = {
+	modelName: string
 	hasColorAttribute: boolean
 	total: number
 	blending: Blending
@@ -18,10 +19,14 @@ class PointMaterial extends Material {
 	public hasRadiusAttribute = false
 	public hasTimeAttribute = false
 	constructor(props: IProps) {
-		const { color, radius } = props
+		const { color, radius, modelName } = props
 		super({
-			id: 'point',
-			renderCode: getShaderCode(props.hasColorAttribute, props.radiusStorage.hasData, !!props.hasTime),
+			id: modelName + '-material',
+			renderCode: getShaderCode(
+				props.hasColorAttribute,
+				props.radiusStorage.hasData,
+				!!props.hasTime
+			),
 			vertexShaderEntry: 'vs',
 			fragmentShaderEntry: 'fs',
 			blending: props.blending,

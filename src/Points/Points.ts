@@ -13,6 +13,7 @@ const defaultStyle = {
 }
 
 type IProps = {
+	id: string
 	position: Float32Array
 	radius?: Uint8Array
 	color?: Uint8Array
@@ -35,11 +36,16 @@ class Points extends Model implements IPlayable {
 	 * @param props
 	 */
 	constructor(props: IProps) {
-		const geometry = new Geometry()
+		const geometry = new Geometry(props.id + '-geometry')
 		const style = deepMerge(defaultStyle, props.style || {})
 		const total = props.total || props.position.length / 2
-		const radiusStorage = new RadiusStorage({ data: props.radius, total })
+		const radiusStorage = new RadiusStorage({
+			id: props.id + '-storage',
+			data: props.radius,
+			total,
+		})
 		const material = new PointMaterial({
+			modelName: props.id,
 			...defaultStyle,
 			...style,
 			radiusStorage,
@@ -48,7 +54,7 @@ class Points extends Model implements IPlayable {
 			total,
 		})
 
-		super(geometry, material)
+		super(props.id, geometry, material)
 
 		this._style = style
 		this._total = total
@@ -85,7 +91,11 @@ class Points extends Model implements IPlayable {
 				capacity: this.total * 4,
 			})
 			this.geometry.setAttribute('color', colorAttribute)
-			this.material.updateShaderCode(true, this.material.hasRadiusAttribute, this.material.hasTimeAttribute)
+			this.material.updateShaderCode(
+				true,
+				this.material.hasRadiusAttribute,
+				this.material.hasTimeAttribute
+			)
 		}
 		for (let item of params) {
 			const [i, color] = item
@@ -100,7 +110,11 @@ class Points extends Model implements IPlayable {
 	batchUpdateRadius(params: [number, number][]) {
 		const radiusStorage = this.getRadiusStorage()
 		if (!radiusStorage.hasData) {
-			this.material.updateShaderCode(this.material.hasColorAttribute, true, this.material.hasTimeAttribute)
+			this.material.updateShaderCode(
+				this.material.hasColorAttribute,
+				true,
+				this.material.hasTimeAttribute
+			)
 		}
 		radiusStorage.updatePointsRadius(
 			params.map((i) => i[1]),
@@ -124,7 +138,9 @@ class Points extends Model implements IPlayable {
 				let colorArray = this.getAttribute('color')
 				if (!colorArray) {
 					const colorArray32 = new Uint32Array(this.total) //使用 Uint32Array 代替 Uint8Array，达到 TypedArray 快速填充的目的
-					const packedColor = packUint8ToUint32(this._style.color.map((c: number) => c * 255))
+					const packedColor = packUint8ToUint32(
+						this._style.color.map((c: number) => c * 255)
+					)
 					colorArray32.fill(packedColor)
 					colorArray = new Uint8Array(colorArray32.buffer)
 					const colorAttribute = new Attribute('color', colorArray, 4, {
@@ -157,7 +173,12 @@ class Points extends Model implements IPlayable {
 						this.material.hasTimeAttribute
 					)
 				}
-				radiusStorage.updatePointsRadius(style.radius, this._style.radius, this.total, pointIndices)
+				radiusStorage.updatePointsRadius(
+					style.radius,
+					this._style.radius,
+					this.total,
+					pointIndices
+				)
 			}
 		}
 	}

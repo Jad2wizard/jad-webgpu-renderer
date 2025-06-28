@@ -146,6 +146,6 @@ setTimeout(() => {
 
 -   [ ] 渲染器分层实现。geometry, material, model, scene, uniform, storage, attribute, texture 等只实现业务相关的逻辑，不实现包括 WebGPU API 调用等底层逻辑
 -   [x] Renderer 中提供 render 等对外方法，不负责具体渲染逻辑的实现
--   [ ] 新建WebGPUUtils、WebGPUPipelineUtils、WebGPUTextureUtils、WebGPUPipelineUtils, WebGPUBindingUtils 等工具类，负责处理 WebGPU API 调用等底层逻辑
--   [ ] 新建 WebGPUBackend 类，负责整合 Utils 工具类，并提供具体的渲染实现的方法给 Renderer 类
+-   [x] 新建WebGPUUtils、WebGPUPipelineUtils、WebGPUTextureUtils、WebGPUPipelineUtils, WebGPUBindingUtils 等工具类，负责处理 WebGPU API 调用等底层逻辑
+-   [x] 新建 WebGPUBackend 类，负责整合 Utils 工具类，并提供具体的渲染实现的方法给 Renderer 类
 -   [x] Buffer, BufferView 和 BufferPool等类的重新设计和实现

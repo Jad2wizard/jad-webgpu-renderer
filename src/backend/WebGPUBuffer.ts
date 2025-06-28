@@ -243,7 +243,8 @@ export class WebGPUBuffer {
 	private _device: GPUDevice | null = null
 
 	constructor(options: WebGPUBufferOptions) {
-		this._id = options.label || `webgpu_buffer_${options.resourceName}_${genId()}`
+		console.log(`label: ${options.label}\t resource name: ${options.resourceName}`)
+		this._id = options.label + '-buffer'
 		this._resourceName = options.resourceName
 		this._size = options.size
 		this._usage = options.usage

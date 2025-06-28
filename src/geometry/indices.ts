@@ -3,13 +3,19 @@ import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
 import { WebGPUBackend } from '@/backend'
 
 class Index {
+	private _name: string
 	private _array: TypedArray
 	private _buffer: WebGPUBuffer | null = null
 	private _needsUpdate = true
 
-	constructor(data: TypedArray) {
+	constructor(name: string, data: TypedArray) {
+		this._name = name
 		this._array = data
 		// Buffer 将在 updateBuffer 时创建
+	}
+
+	get name() {
+		return this._name
 	}
 
 	get needsUpdate() {
@@ -38,10 +44,11 @@ class Index {
 			if (!this._buffer) {
 				// 创建新的 buffer
 				this._buffer = backend.createBuffer({
+					label: this._name,
 					type: BufferType.INDEX,
 					resourceName: 'index',
 					size: this._array.byteLength,
-					initialData: this._array.buffer
+					initialData: this._array.buffer,
 				})
 			} else {
 				// 更新现有 buffer

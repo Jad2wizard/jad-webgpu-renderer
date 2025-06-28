@@ -2,6 +2,7 @@ import Storage, { IProps as StorageProps } from '../material/storage'
 import { packUint8ToUint32, unpackUint32ToUint8 } from '@/utils'
 
 type IProps = {
+	id: string
 	data?: Uint8Array
 	total?: number
 }
@@ -42,8 +43,7 @@ class RadiusStorage extends Storage {
 			// 当没有数据时，创建一个最小的有效数组以避免 WebGPU 绑定组错误
 			radiusUint32Array = new Uint32Array(1)
 		}
-		console.log(radiusUint32Array)
-		super({ name: 'radius', value: radiusUint32Array })
+		super({ id: props.id, name: 'radius', value: radiusUint32Array })
 		this._hasRealData = hasRealData
 		if (props.total && props.data && props.data.length < props.total) {
 			this.reallocate(props.total)

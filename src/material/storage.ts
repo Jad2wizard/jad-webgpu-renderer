@@ -5,6 +5,7 @@ import { WebGPUBackend } from '@/backend'
 import { VariableDefinition } from 'webgpu-utils'
 
 export type IProps = {
+	id: string
 	name: string
 	def?: VariableDefinition
 	value?: TypedArray
@@ -16,6 +17,7 @@ export type IProps = {
  * 需要我们自己设置typedArray。而且 storage buffer的大小是可变的
  */
 class Storage {
+	protected _id: string
 	protected _name: string
 	protected _value: TypedArray
 	protected _buffer: WebGPUBuffer | null = null
@@ -23,10 +25,15 @@ class Storage {
 	protected _def?: VariableDefinition
 
 	constructor(props: IProps) {
+		this._id = props.id
 		this._name = props.name
 		this._value = props.value || new Float32Array()
 		this._def = props.def
 		// Buffer 将在 updateBuffer 时创建
+	}
+
+	get id() {
+		return this._id
 	}
 
 	get name() {
@@ -79,6 +86,7 @@ class Storage {
 			if (!this._buffer) {
 				// 创建新的 buffer
 				this._buffer = backend.createBuffer({
+					label: this._id,
 					type: BufferType.STORAGE,
 					resourceName: this._name,
 					size: this._value.byteLength,

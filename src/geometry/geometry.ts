@@ -5,14 +5,20 @@ import { WebGPUBuffer } from '@/backend/WebGPUBuffer'
 import { WebGPUBackend } from '@/backend'
 
 class Geometry {
+	private _id: string
 	private _group?: Group
 	private attributes: Record<string, Attribute>
 	private _vertexCount = -1
 	private _instanceCount = -1
 	public index: Index | null = null
 
-	constructor() {
+	constructor(id: string) {
+		this._id = id
 		this.attributes = {}
+	}
+
+	get id() {
+		return this._id
 	}
 
 	set group(value: Group | undefined) {
@@ -55,6 +61,7 @@ class Geometry {
 			while (existedLocations.includes(location)) location++
 			attribute.shaderLocation = location
 		}
+		attribute.name = this.id + '-' + attribtueName
 		this.attributes[attribtueName] = attribute
 		// const count = attribute.array.length / attribute.itemSize
 		// if (attribute.stepMode === 'vertex' && this._vertexCount === -1) this._vertexCount = count
@@ -76,7 +83,7 @@ class Geometry {
 				this.index = null
 			}
 		} else {
-			if (!this.index) this.index = new Index(arr)
+			if (!this.index) this.index = new Index(this.id + '-index', arr)
 			else this.index.array = arr
 		}
 	}

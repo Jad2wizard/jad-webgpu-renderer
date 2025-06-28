@@ -27,14 +27,14 @@ async function initApp() {
 
 	// const pos = new Float32Array([30, 20, 0, 20, 0, 0, -40, 0])
 	const totalTime = 20
-	const num = 10000
+	const num = 200
 	let pos = new Float32Array(num * 2)
 	const color = new Uint8Array(num * 4)
 	const size = new Uint8Array(num)
 	const timestamps = new Float32Array(num)
 	for (let i = 0; i < num; ++i) {
-		pos[2 * i] = (800 / num) * i - 350
-		pos[2 * i + 1] = Math.sin(((2 * Math.PI) / num) * i) * 100
+		pos[2 * i] = (760 / num) * i - 380
+		pos[2 * i + 1] = Math.sin(((2 * Math.PI) / num) * i) * 150
 		color[i * 4 + 0] = 1 * 255
 		color[i * 4 + 1] = ((num - i) / num) * 1 * 255
 		color[i * 4 + 2] = 0 * 255
@@ -44,9 +44,10 @@ async function initApp() {
 	}
 	const step = Math.ceil(num / 10)
 	const points = new Points({
+		id: 'point-demo',
 		position: pos.subarray(0, step * 2),
-		// color: color.subarray(0, step * 4),
-		// radius: size.subarray(0, step),
+		color: color.subarray(0, step * 4),
+		radius: size.subarray(0, step),
 		// startTime: timestamps.subarray(0, 50),
 		// position: pos,
 		// // color,
@@ -54,9 +55,9 @@ async function initApp() {
 		// startTime: timestamps,
 		// total: num,
 		style: {
-			color: [1, 0.9, 0.2, 0.9],
+			color: [1, 0.9, 0.2, 0.1],
 			blending: 'normalBlending',
-			radius: 10,
+			radius: 15,
 		},
 	})
 	//@ts-ignore
@@ -70,8 +71,8 @@ async function initApp() {
 			points.appendPoints({
 				position: pos.subarray(i * 2, (i + step) * 2),
 				// startTime: timestamps.subarray(i, i + 50),
-				// color: color.subarray(i * 4, (i + step) * 4),
-				// radius: size.subarray(i, i + step),
+				color: color.subarray(i * 4, (i + step) * 4),
+				radius: size.subarray(i, i + step),
 			})
 		}
 		i += step

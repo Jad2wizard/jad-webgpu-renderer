@@ -5,12 +5,14 @@ import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
 import { WebGPUBackend } from '@/backend'
 
 export type IProps = {
+	id: string
 	name: string
 	def: VariableDefinition
 	value: any
 }
 
 class Uniform {
+	protected _id: string
 	protected _name: string
 	protected def: VariableDefinition
 	protected view: StructuredView
@@ -19,12 +21,17 @@ class Uniform {
 	protected _needsUpdate = true
 
 	constructor(props: IProps) {
+		this._id = props.id
 		this._name = props.name
 		this.def = props.def
 		this._value = props.value
 		this.view = makeStructuredView(this.def)
 		this.view.set(props.value)
 		// Buffer 将在 updateBuffer 时创建
+	}
+
+	get id() {
+		return this._id
 	}
 
 	get name() {
@@ -70,10 +77,11 @@ class Uniform {
 			if (!this._buffer) {
 				// 创建新的 buffer
 				this._buffer = backend.createBuffer({
+					label: this.id,
 					type: BufferType.UNIFORM,
 					resourceName: this._name,
 					size: this.view.arrayBuffer.byteLength,
-					initialData: this.view.arrayBuffer
+					initialData: this.view.arrayBuffer,
 				})
 			} else {
 				// 更新现有 buffer

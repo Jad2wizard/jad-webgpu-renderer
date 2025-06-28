@@ -17,8 +17,8 @@ class Model implements IRenderable {
 	protected _style: any = {}
 	protected textures: Record<string, GPUTexture> = {}
 
-	constructor(geometry: Geometry, material: Material, opts?: Options) {
-		this._id = 'model_' + genId()
+	constructor(name: string, geometry: Geometry, material: Material, opts?: Options) {
+		this._id = name
 		this._geometry = geometry
 		this._material = material
 		this._visible = true
@@ -101,7 +101,8 @@ class Model implements IRenderable {
 			renderer,
 			camera,
 			backend,
-			this.textures
+			this.textures,
+			geometry.getVertexBufferLayout()
 		)
 
 		// 设置管线
@@ -120,10 +121,7 @@ class Model implements IRenderable {
 		}
 		const indexBuffer = geometry.getIndexBuffer(backend)
 		if (indexBuffer && geometry.index) {
-			pass.setIndexBuffer(
-				indexBuffer.GPUBuffer!,
-				indexFormat as GPUIndexFormat
-			)
+			pass.setIndexBuffer(indexBuffer.GPUBuffer!, indexFormat as GPUIndexFormat)
 			pass.drawIndexed(geometry.index.array.length, geometry.instanceCount)
 		} else {
 			pass.draw(geometry.vertexCount, geometry.instanceCount)

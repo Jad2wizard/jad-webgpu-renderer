@@ -40,6 +40,10 @@ class Attribute {
 		return this._name
 	}
 
+	set name(v: string) {
+		this._name = v
+	}
+
 	get shaderLocation() {
 		return this._shaderLocation
 	}
@@ -77,11 +81,13 @@ class Attribute {
 		if (this.needsUpdate && this._array) {
 			if (!this._buffer) {
 				// 创建新的 buffer
+				const resourceName = 'attrubite_' + this._name
 				this._buffer = backend.createBuffer({
+					label: resourceName,
 					type: BufferType.VERTEX,
-					resourceName: 'attribute_' + this._name,
+					resourceName,
 					size: this._array.byteLength,
-					initialData: this._array.buffer
+					initialData: this._array.buffer,
 				})
 			} else {
 				// 更新现有 buffer
@@ -97,7 +103,8 @@ class Attribute {
 		let typeStr = this._array.constructor.name.split('Array')[0].toLocaleLowerCase() //Float32, Uint8, Int8, ...
 		if (typeStr.startsWith('int')) typeStr = 's' + typeStr
 		// if (typeStr.includes('int')) typeStr = typeStr.replace('int', 'norm')
-		return (typeStr.toLocaleLowerCase() + (this.itemSize === 1 ? '' : `x${this.itemSize}`)) as GPUVertexFormat
+		return (typeStr.toLocaleLowerCase() +
+			(this.itemSize === 1 ? '' : `x${this.itemSize}`)) as GPUVertexFormat
 	}
 
 	public reallocate(size: number) {

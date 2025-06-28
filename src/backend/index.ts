@@ -5,6 +5,18 @@ import { WebGPUUtils } from './WebGPUUtils'
 import { normalizeColor } from '@/utils'
 import Renderer from '@/Renderer'
 import { BufferManager, BufferType, CreateBufferOptions, WebGPUBuffer } from './WebGPUBuffer'
+import { WebGPUPipelineManager } from './WebGPUPipeline'
+import type { WebGPUPipelineOptions } from './WebGPUPipeline'
+import { WebGPUBindGroupManager } from './WebGPUBindGroup'
+import type { BindGroupEntryConfig, SystemUniformType } from './WebGPUBindGroup'
+
+// 导出 Pipeline 相关类和接口
+export { WebGPUPipelineManager }
+export type { WebGPUPipelineOptions }
+
+// 导出 BindGroup 相关类和接口
+export { WebGPUBindGroupManager }
+export type { BindGroupEntryConfig, SystemUniformType }
 
 export class WebGPUBackend {
 	private device: GPUDevice
@@ -18,6 +30,8 @@ export class WebGPUBackend {
 	private multisampleTexture: GPUTexture | null
 	private resolutionBuf: GPUBuffer
 	private bufferManager: BufferManager // 添加 BufferManager 实例
+	private pipelineManager: WebGPUPipelineManager // 添加 PipelineManager 实例
+	private bindGroupManager: WebGPUBindGroupManager // 添加 BindGroupManager 实例
 
 	constructor(
 		canvas: HTMLCanvasElement,
@@ -57,8 +71,6 @@ export class WebGPUBackend {
 		return this.format
 	}
 
-
-
 	getRenderPassDescriptor(renderTarget?: GPUTexture) {
 		this.updateRenderPassDescriptor(renderTarget)
 		this.updateResolution()
@@ -79,6 +91,12 @@ export class WebGPUBackend {
 
 			// 初始化 BufferManager
 			this.bufferManager = new BufferManager(device)
+
+			// 初始化 PipelineManager
+			this.pipelineManager = new WebGPUPipelineManager(device)
+
+			// 初始化 BindGroupManager
+			this.bindGroupManager = new WebGPUBindGroupManager(device)
 
 			this.context.configure({
 				device,
@@ -208,6 +226,20 @@ export class WebGPUBackend {
 	}
 
 	/**
+	 * 获取 PipelineManager 实例
+	 */
+	getPipelineManager(): WebGPUPipelineManager {
+		return this.pipelineManager
+	}
+
+	/**
+	 * 获取 BindGroupManager 实例
+	 */
+	getBindGroupManager(): WebGPUBindGroupManager {
+		return this.bindGroupManager
+	}
+
+	/**
 	 * 统一的 Buffer 创建函数（替换所有类型特定的创建方法）
 	 * @param options 创建选项
 	 * @returns WebGPUBuffer实例
@@ -217,7 +249,7 @@ export class WebGPUBackend {
 		resourceName: string
 		size: number
 		initialData?: ArrayBuffer | ArrayBufferView
-		label?: string
+		label: string
 	}): WebGPUBuffer {
 		if (!this.bufferManager) {
 			throw new Error('BufferManager not initialized. Call init() first.')
