@@ -3,7 +3,7 @@ import Renderer from './Renderer'
 import Geometry from './geometry/geometry'
 import Material from './material/material'
 import { IRenderable, TypedArray } from '@/types'
-import { genId, indexFormat } from './utils'
+import { indexFormat } from './utils'
 import { WebGPUBackend } from '@/backend'
 
 type Options = {}

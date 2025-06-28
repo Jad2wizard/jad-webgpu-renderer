@@ -1,4 +1,3 @@
-import { genId } from '@/utils'
 import { TypedArray } from '@/types'
 import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
 import { WebGPUBackend } from '@/backend'

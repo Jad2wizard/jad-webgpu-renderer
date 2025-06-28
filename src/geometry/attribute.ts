@@ -1,5 +1,4 @@
 /* eslint-disable no-undef */
-import { genId } from '@/utils'
 import { TypedArray } from '@/types'
 import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
 import { WebGPUBackend } from '@/backend'
@@ -99,12 +98,103 @@ class Attribute {
 		return false
 	}
 
-	public getFormat() {
-		let typeStr = this._array.constructor.name.split('Array')[0].toLocaleLowerCase() //Float32, Uint8, Int8, ...
-		if (typeStr.startsWith('int')) typeStr = 's' + typeStr
-		// if (typeStr.includes('int')) typeStr = typeStr.replace('int', 'norm')
-		return (typeStr.toLocaleLowerCase() +
-			(this.itemSize === 1 ? '' : `x${this.itemSize}`)) as GPUVertexFormat
+	public getFormat(): GPUVertexFormat {
+		// 验证数组是否存在
+		if (!this._array) {
+			throw new Error(`Attribute '${this._name}': array is null or undefined`)
+		}
+
+		// 验证 itemSize 的有效性
+		if (!Number.isInteger(this._itemSize) || this._itemSize < 1 || this._itemSize > 4) {
+			throw new Error(
+				`Attribute '${this._name}': itemSize must be an integer between 1 and 4, got ${this._itemSize}`
+			)
+		}
+
+		// 获取类型字符串
+		const constructorName = this._array.constructor.name
+		if (!constructorName || !constructorName.endsWith('Array')) {
+			throw new Error(`Attribute '${this._name}': invalid array type '${constructorName}'`)
+		}
+
+		// 提取基础类型名称
+		let baseType = constructorName.replace('Array', '').toLowerCase()
+
+		// 处理不同的数据类型
+		let typePrefix: string
+		switch (baseType) {
+			case 'float32':
+				typePrefix = 'float32'
+				break
+			case 'float64':
+				// WebGPU 不支持 float64，抛出错误
+				throw new Error(`Attribute '${this._name}': float64 is not supported in WebGPU`)
+			case 'uint8':
+				typePrefix = 'uint8'
+				break
+			case 'uint16':
+				typePrefix = 'uint16'
+				break
+			case 'uint32':
+				typePrefix = 'uint32'
+				break
+			case 'int8':
+				typePrefix = 'sint8'
+				break
+			case 'int16':
+				typePrefix = 'sint16'
+				break
+			case 'int32':
+				typePrefix = 'sint32'
+				break
+			default:
+				throw new Error(`Attribute '${this._name}': unsupported array type '${baseType}'`)
+		}
+
+		// 构建格式字符串
+		const formatStr = this._itemSize === 1 ? typePrefix : `${typePrefix}x${this._itemSize}`
+
+		// 验证生成的格式是否为有效的 GPUVertexFormat
+		const validFormats: GPUVertexFormat[] = [
+			'uint8x2',
+			'uint8x4',
+			'sint8x2',
+			'sint8x4',
+			'unorm8x2',
+			'unorm8x4',
+			'snorm8x2',
+			'snorm8x4',
+			'uint16x2',
+			'uint16x4',
+			'sint16x2',
+			'sint16x4',
+			'unorm16x2',
+			'unorm16x4',
+			'snorm16x2',
+			'snorm16x4',
+			'float16x2',
+			'float16x4',
+			'float32',
+			'float32x2',
+			'float32x3',
+			'float32x4',
+			'uint32',
+			'uint32x2',
+			'uint32x3',
+			'uint32x4',
+			'sint32',
+			'sint32x2',
+			'sint32x3',
+			'sint32x4',
+		]
+
+		if (!validFormats.includes(formatStr as GPUVertexFormat)) {
+			throw new Error(
+				`Attribute '${this._name}': generated format '${formatStr}' is not a valid GPUVertexFormat`
+			)
+		}
+
+		return formatStr as GPUVertexFormat
 	}
 
 	public reallocate(size: number) {

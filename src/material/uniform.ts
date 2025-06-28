@@ -1,5 +1,4 @@
 /* eslint-disable no-undef */
-import { genId } from '@/utils'
 import { makeStructuredView, StructuredView, VariableDefinition } from 'webgpu-utils'
 import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
 import { WebGPUBackend } from '@/backend'

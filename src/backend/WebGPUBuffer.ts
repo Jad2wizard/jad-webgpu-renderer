@@ -1,5 +1,3 @@
-import { genId } from '@/utils/index'
-
 export interface WebGPUBufferOptions {
 	resourceName: string
 	size: number
