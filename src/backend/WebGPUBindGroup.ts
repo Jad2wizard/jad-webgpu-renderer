@@ -92,6 +92,7 @@ export class WebGPUBindGroupManager {
 		// 遍历每个绑定组索引，为每个组创建对应的绑定组
 		for (let index of groupIndexList) {
 			const entries: BindGroupEntryConfig[] = []
+			const bindIndexList: number[] = []
 
 			// 处理uniform变量
 			for (let un in uniforms) {
@@ -127,6 +128,7 @@ export class WebGPUBindGroupManager {
 				}
 
 				if (buffer) {
+					bindIndexList.push(uniform.binding)
 					entries.push({
 						binding: uniform.binding,
 						resource: { buffer, offset: 0, size: uniform.size },
@@ -143,6 +145,7 @@ export class WebGPUBindGroupManager {
 				if (storage.needsUpdate) storage.updateBuffer(backend)
 				const buffer = storage.buffer?.GPUBuffer
 				if (buffer) {
+					bindIndexList.push(storage.binding)
 					entries.push({
 						binding: storage.binding,
 						resource: { buffer, offset: 0, size: storage.size },
@@ -173,6 +176,7 @@ export class WebGPUBindGroupManager {
 			}
 			const bindGroup = this.device.createBindGroup(descriptor)
 			bindGroups.push(bindGroup)
+			console.log(bindIndexList)
 		}
 
 		// 返回创建的绑定组数组和对应的组索引列表
