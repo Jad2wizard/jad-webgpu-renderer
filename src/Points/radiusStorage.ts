@@ -1,30 +1,9 @@
-import Storage, { IProps as StorageProps } from '../material/storage'
-import { packUint8ToUint32, unpackUint32ToUint8 } from '@/utils'
+import Storage from '../material/storage'
 
 type IProps = {
 	id: string
 	data?: Uint8Array
 	total?: number
-}
-
-export const transformRadiusArray = (data: Uint8Array | { value: number; total: number }) => {
-	const radiuses = new Uint32Array(Math.ceil('total' in data ? data.total / 4 : data.length / 4))
-	for (let i = 0; i < radiuses.length; ++i) {
-		if ('value' in data) {
-			const v = data.value
-			radiuses[i] = packUint8ToUint32([v, v, v, v])
-		} else {
-			// 修复：data数组中每个元素都是一个radius值，将4个连续的radius值打包成一个uint32
-			// 例如：data[0,1,2,3] -> radiuses[0], data[4,5,6,7] -> radiuses[1]
-			radiuses[i] = packUint8ToUint32([
-				data[i * 4 + 0] || 0,
-				data[i * 4 + 1] || 0,
-				data[i * 4 + 2] || 0,
-				data[i * 4 + 3] || 0,
-			])
-		}
-	}
-	return radiuses
 }
 
 /**
@@ -35,15 +14,9 @@ class RadiusStorage extends Storage {
 	private _hasRealData: boolean
 
 	constructor(props: IProps) {
-		let radiusUint32Array: Uint32Array | undefined
 		const hasRealData = !!props.data
-		if (props.data) {
-			radiusUint32Array = transformRadiusArray(props.data)
-		} else {
-			// 当没有数据时，创建一个最小的有效数组以避免 WebGPU 绑定组错误
-			radiusUint32Array = new Uint32Array(1)
-		}
-		super({ id: props.id, name: 'radius', value: radiusUint32Array })
+		const radiusData = hasRealData ? props.data : new Uint8Array(1)
+		super({ id: props.id, name: 'radius', value: radiusData })
 		this._hasRealData = hasRealData
 		if (props.total && props.data && props.data.length < props.total) {
 			this.reallocate(props.total)
@@ -56,9 +29,7 @@ class RadiusStorage extends Storage {
 
 	getPointRadius(index: number) {
 		if (!this.hasData) return undefined
-		const i = Math.floor(index / 4)
-		const offset = index % 4
-		return unpackUint32ToUint8(this.value[i])[offset]
+		return this.value[index]
 	}
 
 	updatePointsRadius(
@@ -68,16 +39,12 @@ class RadiusStorage extends Storage {
 		pointIndices: number[]
 	) {
 		if (!this.hasData) {
-			const uint32Arr = transformRadiusArray({ value: defaultRadius, total })
-			this.updateValue(uint32Arr)
-		}
-		if (this.value) {
+			const value = new Uint8Array(total).fill(defaultRadius)
+			this.updateValue(value)
+		} else {
+			const valueUint8 = new Uint8Array(this.value.buffer)
 			for (let i of pointIndices) {
-				const index = Math.floor(i / 4)
-				const offset = i % 4
-				const unpacked = unpackUint32ToUint8(this.value[index])
-				unpacked[offset] = Array.isArray(radius) ? radius[pointIndices.indexOf(i)] : radius
-				this.value[index] = packUint8ToUint32(unpacked)
+				valueUint8[i] = Array.isArray(radius) ? radius[pointIndices.indexOf(i)] : radius
 			}
 		}
 		this.needsUpdate = true
@@ -94,41 +61,10 @@ class RadiusStorage extends Storage {
 		this.needsUpdate = true
 	}
 
-	appendData(radiusArray8: Uint8Array, appendLen: number, start: number) {
+	appendData(radiusArray: Uint8Array, appendLen: number, start: number) {
 		if (!this.hasData) return
-		const si = Math.floor(start / 4)
-		const sj = start % 4
-		let offset = 0
-		if (sj > 0) {
-			const unpacked = unpackUint32ToUint8(this.value[si])
-			for (let i = sj; i < unpacked.length; ++i) {
-				unpacked[i] = radiusArray8[offset++]
-			}
-			this.value[si] = packUint8ToUint32(unpacked)
-		}
-		const toAppend = transformRadiusArray(radiusArray8.subarray(offset))
-		this.value.set(toAppend, si + (sj > 0 ? 1 : 0))
+		this.value.set(radiusArray, start)
 		this.needsUpdate = true
-	}
-
-	/**
-	 * 克隆当前 RadiusStorage 实例
-	 * @param id 新实例的 id，如果不提供则使用原实例的 id
-	 * @returns 新的 RadiusStorage 实例
-	 */
-	public clone(id?: string): RadiusStorage {
-		// 从当前的 Uint32Array 重新构造原始的 Uint8Array 数据
-		const originalData = new Uint8Array(this.value.length * 4)
-		for (let i = 0; i < this.value.length; i++) {
-			const unpacked = unpackUint32ToUint8(this.value[i])
-			originalData.set(unpacked, i * 4)
-		}
-		
-		return new RadiusStorage({
-			id: id || this._id,
-			data: this._hasRealData ? originalData : undefined,
-			total: this._hasRealData ? originalData.length : undefined,
-		})
 	}
 }
 

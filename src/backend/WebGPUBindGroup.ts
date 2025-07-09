@@ -176,7 +176,6 @@ export class WebGPUBindGroupManager {
 			}
 			const bindGroup = this.device.createBindGroup(descriptor)
 			bindGroups.push(bindGroup)
-			console.log(bindIndexList)
 		}
 
 		// 返回创建的绑定组数组和对应的组索引列表

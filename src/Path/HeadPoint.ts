@@ -12,7 +12,6 @@ export class HeadPoint extends Model {
 		geometry.vertexCount = 6
 		geometry.instanceCount = 1
 
-		debugger
 		const storages: Record<string, any> = {}
 		const uniforms: Record<string, any> = {
 			time: 0,

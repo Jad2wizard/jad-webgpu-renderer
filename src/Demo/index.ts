@@ -29,7 +29,7 @@ async function initApp() {
 
 	// const pos = new Float32Array([30, 20, 0, 20, 0, 0, -40, 0])
 	const totalTime = 20
-	const num = 10000
+	const num = 200
 	let pos = new Float32Array(num * 2)
 	const color = new Uint8Array(num * 4)
 	const size = new Uint8Array(num)
