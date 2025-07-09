@@ -107,6 +107,22 @@ class Storage {
 			this._buffer = null
 		}
 	}
+
+	/**
+	 * 克隆当前 Storage 实例
+	 * @param id 新实例的 id，如果不提供则使用原实例的 id
+	 * @param name 新实例的 name，如果不提供则使用原实例的 name
+	 * @param def 新实例的 def，如果不提供则使用原实例的 def
+	 * @returns 新的 Storage 实例
+	 */
+	public clone(id: string, name: string, def?: VariableDefinition): Storage {
+		return new Storage({
+			id: id || this._id,
+			name: name || this._name,
+			def: def || this._def,
+			value: new (this._value.constructor as any)(this._value),
+		})
+	}
 }
 
 export default Storage

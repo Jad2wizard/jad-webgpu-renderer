@@ -110,6 +110,26 @@ class RadiusStorage extends Storage {
 		this.value.set(toAppend, si + (sj > 0 ? 1 : 0))
 		this.needsUpdate = true
 	}
+
+	/**
+	 * 克隆当前 RadiusStorage 实例
+	 * @param id 新实例的 id，如果不提供则使用原实例的 id
+	 * @returns 新的 RadiusStorage 实例
+	 */
+	public clone(id?: string): RadiusStorage {
+		// 从当前的 Uint32Array 重新构造原始的 Uint8Array 数据
+		const originalData = new Uint8Array(this.value.length * 4)
+		for (let i = 0; i < this.value.length; i++) {
+			const unpacked = unpackUint32ToUint8(this.value[i])
+			originalData.set(unpacked, i * 4)
+		}
+		
+		return new RadiusStorage({
+			id: id || this._id,
+			data: this._hasRealData ? originalData : undefined,
+			total: this._hasRealData ? originalData.length : undefined,
+		})
+	}
 }
 
 export default RadiusStorage
