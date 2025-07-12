@@ -55,6 +55,7 @@ async function initApp() {
 
 	const heatPoints = pos.map((p, i) => (i % 2 === 1 ? p * -1 : p * 0.9))
 	const heat = new Heatmap({
+		id: 'demo-heatmap-1',
 		// points: heatPoints.subarray(0, 100),
 		// startTime: timestamps.subarray(0, 50),
 		points: heatPoints,

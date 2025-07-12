@@ -37,6 +37,7 @@ const defaultStyle = {
 }
 
 type IProps = {
+	id: string
 	points: Float32Array
 	startTime?: Float32Array
 	total?: number
@@ -69,20 +70,20 @@ class Heatmap extends Model implements IPlayable {
 	 * @param props
 	 */
 	constructor(props: IProps) {
-		const geometry = new Geometry('heatmap_geometry_' + genId())
+		const geometry = new Geometry(props.id + '-geometry')
 		geometry.vertexCount = HEATMAP_VERTEX_COUNT
 		const { points, startTime } = props
 		const style = deepMerge(defaultStyle, props.style || {})
 
 		const mat = new Material({
-			id: 'heat_mat_' + genId(),
+			id: props.id + '-material',
 			renderCode: renderShaderCode,
 			vertexShaderEntry: 'vs',
 			fragmentShaderEntry: 'fs',
 			blending: props.style?.blending,
 		})
 
-		super('heatmap_' + genId(), geometry, mat)
+		super(props.id, geometry, mat)
 
 		this.validateProps(props)
 		
@@ -133,13 +134,10 @@ class Heatmap extends Model implements IPlayable {
 	 * @param renderer
 	 */
 	private createHeatValueTexture(renderer: Renderer) {
-		const { device, width, height } = renderer
+		const { width, height } = renderer
+		const textureManager = renderer.webgpuBackend.getTextureManager()
 
-		const heatValueTexture = device.createTexture({
-			size: [width, height, 1],
-			format: 'rgba16float', //因为需要使用纹理的 R 通道存放像素的热力值，故需要选择高精度的浮点数格式，而 rgba32float 又不支持multisample。
-			usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-		})
+		const heatValueTexture = textureManager.createHeatValueTexture(width, height)
 		this.updateTexture('heatValTex', heatValueTexture)
 	}
 
@@ -149,13 +147,9 @@ class Heatmap extends Model implements IPlayable {
 	 * @param renderer
 	 */
 	private createMaxHeatValueTexture(renderer: Renderer) {
-		const { device } = renderer
+		const textureManager = renderer.webgpuBackend.getTextureManager()
 
-		const maxHeatValueTexture = device.createTexture({
-			size: [1, 1, 1],
-			format: 'rgba16float',
-			usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-		})
+		const maxHeatValueTexture = textureManager.createMaxHeatValueTexture()
 		this.updateTexture('maxValTex', maxHeatValueTexture)
 	}
 
@@ -164,7 +158,7 @@ class Heatmap extends Model implements IPlayable {
 			throw new Error('Heat value texture must be created before heat points model')
 		}
 
-		const geo = new Geometry('heat_points_geometry_' + genId())
+		const geo = new Geometry(this.id + '-heat-points-geometry')
 		const positionAttribute = new Attribute('position', this.points, 2, {
 			stepMode: 'instance',
 			shaderLocation: 0,
@@ -185,7 +179,7 @@ class Heatmap extends Model implements IPlayable {
 		geo.instanceCount = this.points.length / 2
 
 		const mat = new Material({
-			id: 'compute heat value',
+			id: this.id + '-heat-points-material',
 			renderCode: genComputeHeatValueShaderCode(!!this.startTime),
 			vertexShaderEntry: 'vs',
 			fragmentShaderEntry: 'fs',
@@ -196,15 +190,15 @@ class Heatmap extends Model implements IPlayable {
 				radius: this._style.radius,
 			},
 		})
-		this.heatPointsModel = new Model('heat_points_model_' + genId(), geo, mat)
+		this.heatPointsModel = new Model(this.id + '-heat-points-model', geo, mat)
 	}
 
 	private createMaxHeatValueModel(renderer: Renderer) {
 		const { width, height } = renderer
-		const geo = new Geometry('max_heat_value_geometry_' + genId())
+		const geo = new Geometry(this.id + '-max-heat-value-geometry')
 		geo.vertexCount = (width * height) / sampleRate / sampleRate //获取最大热力值时不用遍历全部像素点，进行降采样可以节省时间开销
 		const mat = new Material({
-			id: 'compute max heat value',
+			id: this.id + '-max-heat-value-material',
 			renderCode: computeMaxHeatValueShaderCode,
 			vertexShaderEntry: 'vs',
 			fragmentShaderEntry: 'fs',
@@ -213,23 +207,10 @@ class Heatmap extends Model implements IPlayable {
 			multisampleCount: 1,
 			primitive: { topology: 'point-list' },
 		})
-		this.maxHeatValueModel = new Model('max_heat_value_model_' + genId(), geo, mat)
+		this.maxHeatValueModel = new Model(this.id + '-max-heat-value-model', geo, mat)
 	}
 
-	/**
-	 * Creates a render pass descriptor for heat value rendering
-	 */
-	private createRenderPassDescriptor(label: string, texture: GPUTexture): GPURenderPassDescriptor {
-		return {
-			label,
-			colorAttachments: [{
-				view: texture.createView(),
-				clearValue: CLEAR_COLOR,
-				loadOp: 'clear',
-				storeOp: 'store',
-			}],
-		}
-	}
+
 
 	/**
 	 * Checks if resolution has changed
@@ -290,42 +271,35 @@ class Heatmap extends Model implements IPlayable {
 		if (!this.textures['maxValTex']) this.createMaxHeatValueTexture(renderer)
 		if (!this.heatPointsModel) this.createHeatPointsModel(renderer)
 		if (!this.maxHeatValueModel) this.createMaxHeatValueModel(renderer)
+		
+		const renderPassManager = renderer.webgpuBackend.getRenderPassManager()
 		const heatValTex = this.textures['heatValTex']
+		const maxHeatValTex = this.textures['maxValTex']
+		
+		// 执行热力点渲染通道
 		if (this.heatPointsModel) {
-			const heatRenderPassDesc: GPURenderPassDescriptor = {
-				label: 'heat renderPass',
-				colorAttachments: [
-					{
-						view: heatValTex.createView(),
-						clearValue: [0, 0, 0, 0],
-						loadOp: 'clear',
-						storeOp: 'store',
-					},
-				],
-			}
-			const pass = encoder.beginRenderPass(heatRenderPassDesc)
-			this.heatPointsModel.render(renderer, pass, camera)
-			pass.end()
+			renderPassManager.executeHeatPointsRenderPass(
+				encoder,
+				this.heatPointsModel,
+				heatValTex,
+				renderer,
+				camera
+			)
 		}
+		
+		// 执行最大热力值渲染通道
 		if (this.maxHeatValueModel) {
-			const maxHeatValTex = this.textures['maxValTex']
-			const renderPassDesc: GPURenderPassDescriptor = {
-				label: 'mx heat renderPass',
-				colorAttachments: [
-					{
-						view: maxHeatValTex.createView(),
-						clearValue: [0, 0, 0, 0],
-						loadOp: 'clear',
-						storeOp: 'store',
-					},
-				],
-			}
-			const pass = encoder.beginRenderPass(renderPassDesc)
-			//this.textures 中包含了 heatValTex 纹理，在 material.getBindGroups 中会根据 webgpu-utils 从 shader 代码中
-			//获取到的纹理信息自动从 model.textures 中获取到相关纹理的作为 resource 添加到 bindGroup中，不需要显示绑定
-			//但需要注意的是在同一个Model 中纹理名不要重复
-			this.maxHeatValueModel.render(renderer, pass, camera, this.textures)
-			pass.end()
+			// this.textures 中包含了 heatValTex 纹理，在 material.getBindGroups 中会根据 webgpu-utils 从 shader 代码中
+			// 获取到的纹理信息自动从 model.textures 中获取到相关纹理的作为 resource 添加到 bindGroup中，不需要显示绑定
+			// 但需要注意的是在同一个Model 中纹理名不要重复
+			renderPassManager.executeMaxHeatValueRenderPass(
+				encoder,
+				this.maxHeatValueModel,
+				maxHeatValTex,
+				renderer,
+				camera,
+				this.textures
+			)
 		}
 	}
 

@@ -9,6 +9,8 @@ import { WebGPUPipelineManager } from './WebGPUPipeline'
 import type { WebGPUPipelineOptions } from './WebGPUPipeline'
 import { WebGPUBindGroupManager } from './WebGPUBindGroup'
 import type { BindGroupEntryConfig, SystemUniformType } from './WebGPUBindGroup'
+import { WebGPUTextureManager } from './WebGPUTextureManager'
+import { WebGPURenderPassManager } from './WebGPURenderPassManager'
 
 // 导出 Pipeline 相关类和接口
 export { WebGPUPipelineManager }
@@ -17,6 +19,12 @@ export type { WebGPUPipelineOptions }
 // 导出 BindGroup 相关类和接口
 export { WebGPUBindGroupManager }
 export type { BindGroupEntryConfig, SystemUniformType }
+
+// 导出 Texture 相关类
+export { WebGPUTextureManager }
+
+// 导出 RenderPass 相关类
+export { WebGPURenderPassManager }
 
 export class WebGPUBackend {
 	private device: GPUDevice
@@ -32,6 +40,8 @@ export class WebGPUBackend {
 	private bufferManager: BufferManager // 添加 BufferManager 实例
 	private pipelineManager: WebGPUPipelineManager // 添加 PipelineManager 实例
 	private bindGroupManager: WebGPUBindGroupManager // 添加 BindGroupManager 实例
+	private textureManager: WebGPUTextureManager // 添加 TextureManager 实例
+	private renderPassManager: WebGPURenderPassManager // 添加 RenderPassManager 实例
 
 	constructor(
 		canvas: HTMLCanvasElement,
@@ -97,6 +107,12 @@ export class WebGPUBackend {
 
 			// 初始化 BindGroupManager
 			this.bindGroupManager = new WebGPUBindGroupManager(device)
+
+			// 初始化 TextureManager
+			this.textureManager = new WebGPUTextureManager(device)
+
+			// 初始化 RenderPassManager
+			this.renderPassManager = new WebGPURenderPassManager(device)
 
 			this.context.configure({
 				device,
@@ -238,9 +254,26 @@ export class WebGPUBackend {
 
 	/**
 	 * 获取 BindGroupManager 实例
+	 * @returns BindGroupManager 实例
 	 */
 	getBindGroupManager(): WebGPUBindGroupManager {
 		return this.bindGroupManager
+	}
+
+	/**
+	 * 获取 TextureManager 实例
+	 * @returns TextureManager 实例
+	 */
+	getTextureManager(): WebGPUTextureManager {
+		return this.textureManager
+	}
+
+	/**
+	 * 获取 RenderPassManager 实例
+	 * @returns RenderPassManager 实例
+	 */
+	getRenderPassManager(): WebGPURenderPassManager {
+		return this.renderPassManager
 	}
 
 	/**
