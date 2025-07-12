@@ -30,11 +30,11 @@ class Renderer {
 	}
 
 	get width() {
-		return this.backend.getWidth
+		return this.backend.getWidth()
 	}
 
 	get height() {
-		return this.backend.getHeight
+		return this.backend.getHeight()
 	}
 
 	get device() {

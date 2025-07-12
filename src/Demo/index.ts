@@ -4,6 +4,7 @@ import Renderer from '../Renderer'
 import Scene from '../Scene'
 import Points from '../Points/Points'
 import { Paths } from '../Path/Paths'
+import Heatmap from '../Heatmap/Heatmap'
 import { times } from 'lodash'
 // import * as moment from 'moment'
 
@@ -12,6 +13,9 @@ async function initApp() {
 	window.V = Vector2
 
 	const canvas = document.querySelector('#canvas') as HTMLCanvasElement
+	if (!canvas) {
+		throw new Error('Canvas element with id "canvas" not found')
+	}
 	canvas.width = canvas.offsetWidth
 	canvas.height = canvas.offsetHeight
 
@@ -49,6 +53,28 @@ async function initApp() {
 	}
 	// console.log(timestamps)
 
+	const heatPoints = pos.map((p, i) => (i % 2 === 1 ? p * -1 : p * 0.9))
+	const heat = new Heatmap({
+		// points: heatPoints.subarray(0, 100),
+		// startTime: timestamps.subarray(0, 50),
+		points: heatPoints,
+		// startTime: timestamps,
+		// total: 400,
+		style: {
+			radius: 30,
+			blur: 0.8,
+			colorList: [
+				[1, 0, 0, 0],
+				[0.9, 0.9, 0, 0],
+				[0.1, 0.8, 0.2, 0],
+				[0, 0.0, 1.0, 0],
+				[0, 0, 0, 0],
+			],
+			colorOffsets: [1, 0.85, 0.45, 0.25, 0],
+			blending: 'normalBlending',
+		},
+	})
+
 	// size[9] = 10
 	// size[8] = 10
 	// const path = new Path({
@@ -62,53 +88,53 @@ async function initApp() {
 	// })
 
 	// console.log(timestamps)
-	const paths = new Paths(
-		[
-			{
-				pathId: '1',
-				position: pos,
-				startTime: timestamps,
-				style: {
-					// 	color: [1, 0.3, 0.2, 0.7],
-					// 	lineWidth: 10,
-					// 	headPointColor: [1, 0.9, 0.3, 1],
-					// 	headPointSize: 10,
-					// 	headPointVisible: false,
-					// 	blending: 'normalBlending',
-					// 	drawLine: false,
-					tailDuration: 3,
-				},
-			},
-			{
-				pathId: '2',
-				position: pos.map((p, i) => (i % 2 === 1 ? p * -1.1 : p)),
-				startTime: timestamps,
-				style: {
-					color: [1, 1, 0, 0.7],
-					// 	lineWidth: 5,
-					// 	blending: 'normalBlending',
-					headPointVisible: true,
-					headPointSize: 15,
-					drawLine: true,
-					tailDuration: 5,
-					// 	// colorBySpeed: true,
-					// 	unplayedColor: [1, 0.7, 0.2, 0.5],
-				},
-			},
-		],
-		{
-			color: [1, 0.3, 0.2, 0.9],
-			lineWidth: 10,
-			headPointColor: [1, 0.9, 0.3, 1],
-			headPointSize: 10,
-			headPointVisible: false,
-			blending: 'normalBlending',
-			drawLine: false,
-			tailDuration: 0,
-		}
-	)
-	//@ts-ignore
-	window.t = paths
+	// const paths = new Paths(
+	// 	[
+	// 		{
+	// 			pathId: '1',
+	// 			position: pos,
+	// 			startTime: timestamps,
+	// 			style: {
+	// 				// 	color: [1, 0.3, 0.2, 0.7],
+	// 				// 	lineWidth: 10,
+	// 				// 	headPointColor: [1, 0.9, 0.3, 1],
+	// 				// 	headPointSize: 10,
+	// 				// 	headPointVisible: false,
+	// 				// 	blending: 'normalBlending',
+	// 				// 	drawLine: false,
+	// 				tailDuration: 3,
+	// 			},
+	// 		},
+	// 		{
+	// 			pathId: '2',
+	// 			position: pos.map((p, i) => (i % 2 === 1 ? p * -1.1 : p)),
+	// 			startTime: timestamps,
+	// 			style: {
+	// 				color: [1, 1, 0, 0.7],
+	// 				// 	lineWidth: 5,
+	// 				// 	blending: 'normalBlending',
+	// 				headPointVisible: true,
+	// 				headPointSize: 15,
+	// 				drawLine: true,
+	// 				tailDuration: 5,
+	// 				// 	// colorBySpeed: true,
+	// 				// 	unplayedColor: [1, 0.7, 0.2, 0.5],
+	// 			},
+	// 		},
+	// 	],
+	// 	{
+	// 		color: [1, 0.3, 0.2, 0.9],
+	// 		lineWidth: 10,
+	// 		headPointColor: [1, 0.9, 0.3, 1],
+	// 		headPointSize: 10,
+	// 		headPointVisible: false,
+	// 		blending: 'normalBlending',
+	// 		drawLine: false,
+	// 		tailDuration: 0,
+	// 	}
+	// )
+	// //@ts-ignore
+	// window.t = paths
 
 	// setTimeout(() => {
 	// 	paths.appendPaths([
@@ -132,25 +158,25 @@ async function initApp() {
 	// }, 2000)
 
 	pos = pos.map((p, i) => (i % 2 === 1 ? p * 1.5 : p))
-	const points = new Points({
-		id: 'demo-points-1',
-		// position: pos.subarray(0, 100),
-		// color: color.subarray(0, 200),
-		// radius: size.subarray(0, 50),
-		// startTime: timestamps.subarray(0, 50),
-		position: pos,
-		// color,
-		radius: size,
-		// startTime: timestamps,
-		// total: 400,
-		style: {
-			color: [1, 0.9, 0.2, 0.9],
-			blending: 'normalBlending',
-			radius: 10,
-		},
-	})
-	//@ts-ignore
-	window.p = points
+	// const points = new Points({
+	// 	id: 'demo-points-1',
+	// 	// position: pos.subarray(0, 100),
+	// 	// color: color.subarray(0, 200),
+	// 	// radius: size.subarray(0, 50),
+	// 	// startTime: timestamps.subarray(0, 50),
+	// 	position: pos,
+	// 	// color,
+	// 	radius: size,
+	// 	// startTime: timestamps,
+	// 	// total: 400,
+	// 	style: {
+	// 		color: [1, 0.9, 0.2, 0.9],
+	// 		blending: 'normalBlending',
+	// 		radius: 10,
+	// 	},
+	// })
+	// //@ts-ignore
+	// window.p = points
 
 	// let i = 50
 
@@ -172,8 +198,9 @@ async function initApp() {
 	// heat.renderOrder = 1
 	// points.renderOrder = 0
 	// path.renderOrder = 2
-	scene.addModel(points)
-	scene.addModel(paths)
+	// scene.addModel(points)
+	// scene.addModel(path)
+	scene.addModel(heat)
 
 	let interval = 60
 	let lastTimestamp = 0
@@ -193,7 +220,7 @@ async function initApp() {
 		// }
 		const ct = ((time - start) * (totalTime / 400 / 20)) % timestamps[num - 1]
 		// console.log(ct)
-		paths.updateCurrentTime(ct)
+		// paths.updateCurrentTime(ct)
 		// heat.updateCurrentTime(((time - start) * (totalTime / 400 / 20)) % timestamps[num - 1])
 		renderer.render(scene, camera)
 		requestAnimationFrame(animate)
@@ -203,4 +230,9 @@ async function initApp() {
 	window.addEventListener('resize', renderer.resize)
 }
 
-initApp()
+// 确保 DOM 加载完成后再初始化
+if (document.readyState === 'loading') {
+	document.addEventListener('DOMContentLoaded', initApp)
+} else {
+	initApp()
+}
