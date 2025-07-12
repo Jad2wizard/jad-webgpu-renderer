@@ -13,6 +13,12 @@ import { Camera } from '../camera/camera'
 import Attribute from '../geometry/attribute'
 import { deepMerge, genId } from '../utils'
 
+// Constants
+const HEATMAP_VERTEX_COUNT = 6
+const COLOR_ARRAY_SIZE = 5
+const EXPANSION_FACTOR = 5
+const CLEAR_COLOR: GPUColor = [0, 0, 0, 0]
+
 type ColorList = [Color, Color, Color, Color, Color]
 type OffsetList = [number, number, number, number, number]
 
@@ -46,10 +52,12 @@ type IProps = {
 class Heatmap extends Model implements IPlayable {
 	private points: Float32Array
 	private startTime?: Float32Array
-	//heatPointsModel 和 maxHeatValueModel 都是在 preRender 阶段执行的渲染
-	private heatPointsModel?: Model //负责将根据热力点的坐标和半径渲染各个像素的热力值到输出纹理的R 通道
-	private maxHeatValueModel?: Model //负责根据 heatPointsModel 的输出纹理计算所有像素的最大热力值
+	// heatPointsModel 和 maxHeatValueModel 都是在 preRender 阶段执行的渲染
+	private heatPointsModel?: Model // 负责将根据热力点的坐标和半径渲染各个像素的热力值到输出纹理的R 通道
+	private maxHeatValueModel?: Model // 负责根据 heatPointsModel 的输出纹理计算所有像素的最大热力值
 	private _total: number
+	private _cachedColorOffsets: Float32Array | null = null
+	private lastResolution = { width: 0, height: 0 }
 	/**
 	 * points 为热力点的二维坐标 e.g [x0, y0, x1, y1,....]
 	 * startTime 为热力点的播放时间，可选
@@ -62,7 +70,7 @@ class Heatmap extends Model implements IPlayable {
 	 */
 	constructor(props: IProps) {
 		const geometry = new Geometry('heatmap_geometry_' + genId())
-		geometry.vertexCount = 6
+		geometry.vertexCount = HEATMAP_VERTEX_COUNT
 		const { points, startTime } = props
 		const style = deepMerge(defaultStyle, props.style || {})
 
@@ -76,8 +84,11 @@ class Heatmap extends Model implements IPlayable {
 
 		super('heatmap_' + genId(), geometry, mat)
 
+		this.validateProps(props)
+		
 		this._style = style
 		this._total = props.total || points.length / 2
+		this._cachedColorOffsets = null
 
 		this.material.updateUniform('maxHeatValueRatio', this.style.blur)
 		this.material.updateUniform('colors', this.colorOffsets)
@@ -96,6 +107,24 @@ class Heatmap extends Model implements IPlayable {
 
 	get playable() {
 		return !!this.startTime
+	}
+
+	/**
+	 * Validates constructor props
+	 */
+	private validateProps(props: IProps): void {
+		if (!props.points || props.points.length === 0) {
+			throw new Error('Points array cannot be empty')
+		}
+		if (props.points.length % 2 !== 0) {
+			throw new Error('Points array length must be even (x,y pairs)')
+		}
+		if (props.startTime && props.startTime.length !== props.points.length / 2) {
+			throw new Error('StartTime array length must match number of points')
+		}
+		if (props.total && props.total < props.points.length / 2) {
+			throw new Error('Total cannot be less than current points count')
+		}
 	}
 
 	/**
@@ -131,6 +160,10 @@ class Heatmap extends Model implements IPlayable {
 	}
 
 	private createHeatPointsModel(renderer: Renderer) {
+		if (!this.textures['heatValTex']) {
+			throw new Error('Heat value texture must be created before heat points model')
+		}
+
 		const geo = new Geometry('heat_points_geometry_' + genId())
 		const positionAttribute = new Attribute('position', this.points, 2, {
 			stepMode: 'instance',
@@ -148,7 +181,7 @@ class Heatmap extends Model implements IPlayable {
 			geo.setAttribute('startTime', startTimeAttribute)
 		}
 
-		geo.vertexCount = 6
+		geo.vertexCount = HEATMAP_VERTEX_COUNT
 		geo.instanceCount = this.points.length / 2
 
 		const mat = new Material({
@@ -183,19 +216,37 @@ class Heatmap extends Model implements IPlayable {
 		this.maxHeatValueModel = new Model('max_heat_value_model_' + genId(), geo, mat)
 	}
 
-	lastResolution = { width: 0, height: 0 }
+	/**
+	 * Creates a render pass descriptor for heat value rendering
+	 */
+	private createRenderPassDescriptor(label: string, texture: GPUTexture): GPURenderPassDescriptor {
+		return {
+			label,
+			colorAttachments: [{
+				view: texture.createView(),
+				clearValue: CLEAR_COLOR,
+				loadOp: 'clear',
+				storeOp: 'store',
+			}],
+		}
+	}
+
+	/**
+	 * Checks if resolution has changed
+	 */
+	private hasResolutionChanged(width: number, height: number): boolean {
+		return width !== this.lastResolution.width || height !== this.lastResolution.height
+	}
+
 	private checkCreateHeatValueTexture(renderer: Renderer) {
 		const { width, height } = renderer
+		const resolutionChanged = this.hasResolutionChanged(width, height)
 
-		if (
-			!this.textures['heatValTex'] ||
-			width !== this.lastResolution.width ||
-			height !== this.lastResolution.height
-		) {
+		if (!this.textures['heatValTex'] || resolutionChanged) {
 			this.createHeatValueTexture(renderer)
 		}
 
-		if ((width !== this.lastResolution.width || height !== this.lastResolution.height) && this.maxHeatValueModel) {
+		if (resolutionChanged && this.maxHeatValueModel) {
 			this.maxHeatValueModel.geometry.vertexCount = (width * height) / sampleRate / sampleRate
 		}
 
@@ -210,14 +261,23 @@ class Heatmap extends Model implements IPlayable {
 	}
 
 	get colorOffsets() {
-		const res = new Float32Array(4 * 5)
-		for (let i = 0; i < 5; ++i) {
-			res[i * 4 + 0] = this.style.colorList[i][0]
-			res[i * 4 + 1] = this.style.colorList[i][1]
-			res[i * 4 + 2] = this.style.colorList[i][2]
-			res[i * 4 + 3] = this.style.colorOffsets[i]
+		if (!this._cachedColorOffsets) {
+			this._cachedColorOffsets = new Float32Array(4 * COLOR_ARRAY_SIZE)
+			for (let i = 0; i < COLOR_ARRAY_SIZE; ++i) {
+				this._cachedColorOffsets[i * 4 + 0] = this.style.colorList[i][0]
+				this._cachedColorOffsets[i * 4 + 1] = this.style.colorList[i][1]
+				this._cachedColorOffsets[i * 4 + 2] = this.style.colorList[i][2]
+				this._cachedColorOffsets[i * 4 + 3] = this.style.colorOffsets[i]
+			}
 		}
-		return res
+		return this._cachedColorOffsets
+	}
+
+	/**
+	 * Invalidates cached color offsets
+	 */
+	private invalidateColorCache(): void {
+		this._cachedColorOffsets = null
 	}
 
 	public setTotal(t: number) {
@@ -287,6 +347,7 @@ class Heatmap extends Model implements IPlayable {
 			this.material.changeBlending(style['blending'])
 		}
 		if ('colorList' in style || 'colorOffsets' in style) {
+			this.invalidateColorCache()
 			this.material.updateUniform('colors', this.colorOffsets)
 		}
 	}
@@ -297,14 +358,20 @@ class Heatmap extends Model implements IPlayable {
 	 * @param startTime
 	 */
 	public appendHeatPoints(points: Float32Array, startTime?: Float32Array) {
+		if (!points || points.length === 0) {
+			throw new Error('Points array cannot be empty')
+		}
+		if (points.length % 2 !== 0) {
+			throw new Error('Points array length must be even (x,y pairs)')
+		}
 		if (!this.heatPointsModel) return
 		const appendLen = points.length / 2
 		if (startTime && startTime.length !== appendLen) {
-			throw 'startTime 数据不完备'
+			throw new Error('StartTime array length must match number of points')
 		}
 		const currentLen = this.heatPointsModel.geometry.instanceCount
 		if (appendLen + currentLen > this.total) {
-			this._total = currentLen + appendLen * 5
+			this._total = currentLen + appendLen * EXPANSION_FACTOR
 			this.reallocate()
 		}
 		const positionAttr = this.heatPointsModel.geometry.getAttribute('position')
@@ -323,8 +390,20 @@ class Heatmap extends Model implements IPlayable {
 
 	public dispose() {
 		super.dispose()
+		
+		// Dispose models
 		if (this.maxHeatValueModel) this.maxHeatValueModel.dispose()
 		if (this.heatPointsModel) this.heatPointsModel.dispose()
+		
+		// Clear references
+		this.heatPointsModel = undefined
+		this.maxHeatValueModel = undefined
+		
+		// Clear cached data
+		this._cachedColorOffsets = null
+		
+		// Reset resolution tracking
+		this.lastResolution = { width: 0, height: 0 }
 	}
 }
 

@@ -103,7 +103,7 @@ async function initApp() {
 					headPointVisible: true,
 					headPointSize: 15,
 					drawLine: true,
-					tailDuration: 5,
+					// tailDuration: 5,
 					// 	// colorBySpeed: true,
 					// 	unplayedColor: [1, 0.7, 0.2, 0.5],
 				},
