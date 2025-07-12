@@ -101,7 +101,7 @@ class Model implements IRenderable {
 			renderer,
 			camera,
 			backend,
-			this.textures,
+			textures || this.textures,
 			geometry.getVertexBufferLayout()
 		)
 
@@ -119,12 +119,13 @@ class Model implements IRenderable {
 			const buffer = vertexBuffers[i]
 			pass.setVertexBuffer(i, buffer.GPUBuffer!)
 		}
+		const instanceCount = geometry.instanceCount > -1 ? geometry.instanceCount : undefined
 		const indexBuffer = geometry.getIndexBuffer(backend)
 		if (indexBuffer && geometry.index) {
 			pass.setIndexBuffer(indexBuffer.GPUBuffer!, indexFormat as GPUIndexFormat)
-			pass.drawIndexed(geometry.index.array.length, geometry.instanceCount)
+			pass.drawIndexed(geometry.index.array.length, instanceCount)
 		} else {
-			pass.draw(geometry.vertexCount, geometry.instanceCount)
+			pass.draw(geometry.vertexCount, instanceCount)
 		}
 	}
 
