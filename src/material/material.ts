@@ -112,14 +112,14 @@ class Material {
 		for (let sn in defs.storages) {
 			const storage = storages[sn]
 			if (storage instanceof Storage) {
-				storage.def = defs.storages[sn]
-				this.storages[sn] = storage
+				this.storages[sn] = storage.shallowClone(this.id + '-' + sn + '-storage', sn)
+				this.storages[sn].def = defs.storages[sn]
 			} else {
 				this.storages[sn] = new Storage({
 					name: sn,
 					def: defs.storages[sn],
 					value: storage,
-					id: this.id + '-' + sn + '-uniform',
+					id: this.id + '-' + sn + '-storage',
 				})
 			}
 		}

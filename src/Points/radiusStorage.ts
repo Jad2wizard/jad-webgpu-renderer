@@ -1,3 +1,4 @@
+import { VariableDefinition } from 'webgpu-utils'
 import Storage from '../material/storage'
 
 type IProps = {
@@ -15,12 +16,26 @@ class RadiusStorage extends Storage {
 
 	constructor(props: IProps) {
 		const hasRealData = !!props.data
-		const radiusData = hasRealData ? props.data : new Uint8Array(1)
+		// 确保数据大小是 4 的倍数（WebGPU writeBuffer 要求）
+		const radiusData = hasRealData ? RadiusStorage.ensureAligned(props.data!) : new Uint8Array(4)
 		super({ id: props.id, name: 'radius', value: radiusData })
 		this._hasRealData = hasRealData
 		if (props.total && props.data && props.data.length < props.total) {
 			this.reallocate(props.total)
 		}
+	}
+
+	/**
+	 * 确保数据大小是 4 的倍数
+	 */
+	private static ensureAligned(data: Uint8Array): Uint8Array {
+		const alignedSize = Math.ceil(data.length / 4) * 4
+		if (data.length === alignedSize) {
+			return data
+		}
+		const aligned = new Uint8Array(alignedSize)
+		aligned.set(data)
+		return aligned
 	}
 
 	get hasData() {
@@ -40,7 +55,7 @@ class RadiusStorage extends Storage {
 	) {
 		if (!this.hasData) {
 			const value = new Uint8Array(total).fill(defaultRadius)
-			this.updateValue(value)
+			this.updateValue(RadiusStorage.ensureAligned(value))
 		} else {
 			const valueUint8 = new Uint8Array(this.value.buffer)
 			for (let i of pointIndices) {
@@ -52,10 +67,12 @@ class RadiusStorage extends Storage {
 
 	reallocate(size: number) {
 		if (!this.hasData) return
-		const sizeInUin32 = Math.ceil(size / 4)
-		//@ts-ignore
-		const newValue = new this._value.constructor(sizeInUin32) as typeof this._value
-		newValue.set(this._value.subarray(0, sizeInUin32))
+		// 确保大小是 4 的倍数
+		const alignedSize = Math.ceil(size / 4) * 4
+		const newValue = new Uint8Array(alignedSize)
+		// 复制现有数据，确保不超出原数组边界
+		const copySize = Math.min(this._value.length, alignedSize)
+		newValue.set(new Uint8Array(this._value.buffer, 0, copySize))
 		this._value = newValue
 		// Buffer 大小调整将在下次 updateBuffer 时处理
 		this.needsUpdate = true

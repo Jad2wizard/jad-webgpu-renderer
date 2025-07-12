@@ -180,6 +180,10 @@ export class WebGPUBackend {
 		this.canvas.width = this.canvas.offsetWidth
 		this.canvas.height = this.canvas.offsetHeight
 		this.updateResolution()
+		// 重新创建多重采样纹理以匹配新的 canvas 尺寸
+		if (this.antialias && this.multisampleTexture) {
+			this.createMultisampleTexture()
+		}
 	}
 
 	private createMultisampleTexture() {

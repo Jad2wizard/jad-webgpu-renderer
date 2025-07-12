@@ -8,6 +8,7 @@ export type IProps = {
 	name: string
 	def?: VariableDefinition
 	value?: TypedArray
+	buffer?: WebGPUBuffer
 	byteLength?: number
 }
 
@@ -28,6 +29,7 @@ class Storage {
 		this._name = props.name
 		this._value = props.value || new Float32Array()
 		this._def = props.def
+		this._buffer = props.buffer || null
 		// Buffer 将在 updateBuffer 时创建
 	}
 
@@ -115,12 +117,13 @@ class Storage {
 	 * @param def 新实例的 def，如果不提供则使用原实例的 def
 	 * @returns 新的 Storage 实例
 	 */
-	public clone(id: string, name: string, def?: VariableDefinition): Storage {
+	public shallowClone(id: string, name: string, def?: VariableDefinition): Storage {
 		return new Storage({
 			id: id || this._id,
 			name: name || this._name,
 			def: def || this._def,
-			value: new (this._value.constructor as any)(this._value),
+			value: this.value || undefined,
+			buffer: this.buffer || undefined,
 		})
 	}
 }

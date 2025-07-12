@@ -61,7 +61,7 @@ async function initApp() {
 	// 	}
 	// })
 
-	console.log(timestamps)
+	// console.log(timestamps)
 	const paths = new Paths(
 		[
 			{

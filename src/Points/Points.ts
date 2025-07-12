@@ -40,7 +40,7 @@ class Points extends Model implements IPlayable {
 		const style = deepMerge(defaultStyle, props.style || {})
 		const total = props.total || props.position.length / 2
 		const radiusStorage = new RadiusStorage({
-			id: props.id + '-storage',
+			id: props.id + '-radius-storage',
 			data: props.radius,
 			total,
 		})

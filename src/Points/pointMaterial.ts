@@ -30,9 +30,11 @@ class PointMaterial extends Material {
 			vertexShaderEntry: 'vs',
 			fragmentShaderEntry: 'fs',
 			blending: props.blending,
-			storages: { radius: props.radiusStorage },
+			// storages: { radius: props.radiusStorage },
 			uniforms: { style: { color, radius, currentTime: -1 } },
 		})
+		props.radiusStorage.def = this.storages['radius'].def
+		this.storages['radius'] = props.radiusStorage
 
 		this.hasColorAttribute = props.hasColorAttribute
 		this.hasRadiusAttribute = props.radiusStorage.hasData
