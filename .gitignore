@@ -4,7 +4,7 @@ dist/*.js
 *.DS_Store
 .idea/*
 diff.log
-lib/*
+**/lib/*
 typings/*
 **/*.js
 **/*.py
