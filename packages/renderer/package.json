@@ -1,0 +1,27 @@
+{
+	"name": "@gmap/renderer",
+	"version": "0.1.0",
+	"description": "a webgpu renderer for visualization",
+	"main": "lib/index.js",
+	"types": "typings/index.d.ts",
+	"scripts": {
+		"start": "webpack serve",
+		"build": "npm run clear-output && tsc && tsc-alias",
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"format": "prettier --write \"src/**/*.{ts,tsx,css,scss,html,json,md}\"",
+		"clear-output": "del-cli \"./typings/*\" \"./lib/*\""
+	},
+	"author": "Jad2wizard",
+	"license": "ISC",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Jad2wizard/jad-webgpu-renderer.git"
+	},
+	"files": [
+		"lib",
+		"typings"
+	],
+	"dependencies": {
+		"webgpu-utils": "^1.6.0"
+	}
+}
