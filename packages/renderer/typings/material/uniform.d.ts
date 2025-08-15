@@ -1,6 +1,6 @@
 import { StructuredView, VariableDefinition } from 'webgpu-utils';
-import { WebGPUBuffer } from '../backend/WebGPUBuffer';
-import { WebGPUBackend } from '../backend';
+import { WebGPUBuffer } from '@renderer/backend/WebGPUBuffer';
+import { WebGPUBackend } from '@renderer/backend';
 export type IProps = {
     id: string;
     name: string;

@@ -3,11 +3,8 @@
 	"compilerOptions": {
 		"outDir": "./lib",
 		"declarationDir": "./typings",
-		"typeRoots": ["../../node_modules/@types"],
-		"baseUrl": "./",
-		"paths": {
-			"@/*": ["src/*"]
-		}
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true
 	},
 	"include": ["./src/**/*"],
 	"exclude": ["./typings/**/*"]

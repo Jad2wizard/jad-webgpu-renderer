@@ -3,9 +3,9 @@ import TileMap, { TileLayer } from './tile'
 import Renderer from './renderer'
 import View from './view'
 import Interacts from './interacts'
-import { Extent } from '@/types'
-import LayerManager, { LayerType, LayerProps } from '@/application/layerManager'
-import '@/application/dataLayers/scatterLayer'
+import { Extent } from '@map/types'
+import LayerManager, { LayerType, LayerProps } from '@map/application/layerManager'
+import '@map/application/dataLayers/scatterLayer'
 
 type IProps = {
 	container: HTMLDivElement
@@ -33,8 +33,8 @@ class GMap extends EventEmitter {
 		this.extent = props.extent || { ...defaultExtent }
 		this.interacts = new Interacts({ map: this })
 		this.renderer = new Renderer({ container: this.container, antialias: true })
-		this.view = this.initView({ ...props, extent: this.extent }, this.renderer.canvas)
 		this.tileMap = this.initTileMap({ ...props, extent: this.extent })
+		this.view = this.initView({ ...props, extent: this.extent }, this.renderer.canvas)
 
 		//@ts-ignore
 		window.map = this

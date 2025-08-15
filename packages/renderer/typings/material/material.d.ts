@@ -3,11 +3,11 @@ import { ShaderDataDefinitions } from 'webgpu-utils';
 import { Blending } from '../types';
 import Renderer from '../Renderer';
 import { TypedArray } from '../types';
-import { Camera } from '../camera/camera';
+import { Camera } from '@renderer/camera/camera';
 import Uniform from './uniform';
 import Storage from './storage';
-import { WebGPUBuffer } from '../backend/WebGPUBuffer';
-import { WebGPUBackend } from '../backend';
+import { WebGPUBuffer } from '@renderer/backend/WebGPUBuffer';
+import { WebGPUBackend } from '@renderer/backend';
 type IProps = {
     id: string;
     renderCode: string;

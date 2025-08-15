@@ -1,7 +1,7 @@
 /// <reference types="dist" />
 import Scene from '../Scene';
 import { Camera } from '../camera/camera';
-import Renderer from '../Renderer';
+import Renderer from '@renderer/Renderer';
 import { BufferManager, BufferType, WebGPUBuffer } from './WebGPUBuffer';
 import { WebGPUPipelineManager } from './WebGPUPipeline';
 import type { WebGPUPipelineOptions } from './WebGPUPipeline';

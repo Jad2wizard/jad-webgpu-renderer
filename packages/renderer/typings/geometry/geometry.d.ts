@@ -1,9 +1,9 @@
 /// <reference types="dist" />
 import Attribute from './attribute';
 import Index from './indices';
-import { Group } from '../types';
-import { WebGPUBuffer } from '../backend/WebGPUBuffer';
-import { WebGPUBackend } from '../backend';
+import { Group } from '@renderer/types';
+import { WebGPUBuffer } from '@renderer/backend/WebGPUBuffer';
+import { WebGPUBackend } from '@renderer/backend';
 declare class Geometry {
     private _id;
     private _group?;
@@ -23,7 +23,7 @@ declare class Geometry {
     setAttribute(attribtueName: string, attribute: Attribute): void;
     removeAttribute(attribtueName: string): void;
     setIndex(arr: Uint32Array | undefined): void;
-    getIndex(): import("../types").TypedArray | null;
+    getIndex(): import("@renderer/types").TypedArray | null;
     getIndexBuffer(backend: WebGPUBackend): WebGPUBuffer | null;
     getVertexBufferLayout(): GPUVertexBufferLayout[];
     getAttributes(): Attribute[];

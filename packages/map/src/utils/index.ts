@@ -1,4 +1,4 @@
-import {Color} from '@/types'
+import {Color} from '@map/types'
 
 export const delay = (duration = 1000) => new Promise(resolve => setTimeout(resolve, duration))
 

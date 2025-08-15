@@ -1,6 +1,6 @@
 import View from 'ol/View';
 import OLTileLayer from 'ol/layer/Tile';
-import { Extent } from '@/types';
+import { Extent } from '../types';
 import WMTS from 'ol/source/WMTS';
 import XYZ from 'ol/source/XYZ';
 import OSM from 'ol/source/OSM';

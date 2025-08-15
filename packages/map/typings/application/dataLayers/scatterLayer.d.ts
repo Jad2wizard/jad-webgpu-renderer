@@ -1,5 +1,5 @@
 import { IDataLayer, BaseLayer, IBaseLayerProps, Data, LabelFields, StyleParams } from './layer';
-import { Color } from '@/types';
+import { Color } from '../../types';
 type FieldsType = LabelFields & {
     lon: number;
     lat: number;

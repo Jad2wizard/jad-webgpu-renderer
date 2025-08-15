@@ -7,4 +7,5 @@ diff.log
 **/lib/*
 typings/*
 **/*.js
+!**/webpack.config.js
 **/*.py

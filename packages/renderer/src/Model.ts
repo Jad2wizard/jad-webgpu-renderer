@@ -2,9 +2,9 @@ import { Camera } from './camera/camera'
 import Renderer from './Renderer'
 import Geometry from './geometry/geometry'
 import Material from './material/material'
-import { IRenderable, TypedArray } from '@/types'
+import { IRenderable, TypedArray } from '@renderer/types'
 import { indexFormat } from './utils'
-import { WebGPUBackend } from '@/backend'
+import { WebGPUBackend } from '@renderer/backend'
 
 type Options = {}
 

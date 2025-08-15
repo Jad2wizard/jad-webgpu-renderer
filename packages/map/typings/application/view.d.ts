@@ -1,5 +1,6 @@
 import { Vector2 } from 'three';
-import { Extent } from '@/types';
+import { PerspectiveCamera } from '@gmap/renderer';
+import { Extent } from '../types';
 import TileMap from './tile';
 type IProps = {
     tileMap: TileMap;

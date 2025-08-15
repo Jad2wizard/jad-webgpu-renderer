@@ -1,9 +1,9 @@
 /// <reference types="dist" />
-import { Camera } from '../camera/camera';
-import Renderer from '../Renderer';
-import { WebGPUBackend } from '../backend';
-import Uniform from '../material/uniform';
-import Storage from '../material/storage';
+import { Camera } from '@renderer/camera/camera';
+import Renderer from '@renderer/Renderer';
+import { WebGPUBackend } from '@renderer/backend';
+import Uniform from '@renderer/material/uniform';
+import Storage from '@renderer/material/storage';
 /**
  * BindGroup 条目配置接口
  */

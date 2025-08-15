@@ -1,7 +1,7 @@
 /* eslint-disable no-undef */
 import { makeStructuredView, StructuredView, VariableDefinition } from 'webgpu-utils'
-import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
-import { WebGPUBackend } from '@/backend'
+import { WebGPUBuffer, BufferType } from '@renderer/backend/WebGPUBuffer'
+import { WebGPUBackend } from '@renderer/backend'
 
 export type IProps = {
 	id: string

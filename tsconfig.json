@@ -10,7 +10,13 @@
 		"target": "es6",
 		"jsx": "react",
 		"typeRoots": ["node_modules/@types", "node_modules/@webgpu/types"],
-		"baseUrl": "./"
+		"baseUrl": "./",
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"paths": {
+			"@map/*": ["packages/map/src/*"],
+			"@renderer/*": ["packages/renderer/src/*"]
+		}
 	},
 	"exclude": ["node_modules"]
 }

@@ -1,5 +1,5 @@
-import { Color } from '@/types'
-import * as moment from 'moment'
+import { Color } from '@renderer/types'
+import moment from 'moment'
 import { TypedArray } from 'three'
 import * as _ from 'lodash'
 

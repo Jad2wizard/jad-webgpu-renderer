@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react'
-import ReactDOM from 'react-dom'
+import { createRoot } from 'react-dom/client'
 import GMap from './application'
 import XYZ from 'ol/source/XYZ'
 import TileLayer from 'ol/layer/Tile'
@@ -40,4 +40,8 @@ const Demo = () => {
 	)
 }
 
-ReactDOM.render(<Demo />, document.getElementById('main'))
+const container = document.getElementById('root')
+if (container) {
+	const root = createRoot(container)
+	root.render(<Demo />)
+}

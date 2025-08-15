@@ -1,4 +1,4 @@
-import { Color } from '../types';
+import { Color } from '@renderer/types';
 import { TypedArray } from 'three';
 export declare const genId: () => string;
 export declare const minUniformBufferOffsetAlignment = 256;

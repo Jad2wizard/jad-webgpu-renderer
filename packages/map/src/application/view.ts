@@ -1,7 +1,7 @@
 import { Vector2, MOUSE, Raycaster, Plane, Vector3 } from 'three'
 import { PerspectiveCamera } from '@gmap/renderer'
 import proj4 from 'proj4'
-import { Extent } from '@/types'
+import { Extent } from '@map/types'
 import TileMap from './tile'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
@@ -16,7 +16,7 @@ type IProps = {
 
 const SHIFT = 16
 const CTRL = 17
-const defaultCameraHeight = 2000000
+const defaultCameraHeight = 2000000000
 
 class View {
 	private tileMap: TileMap
@@ -35,7 +35,7 @@ class View {
 		this.tileMap = props.tileMap
 
 		const aspect = this.width / this.height
-		this._camera = new PerspectiveCamera(this.calcFov(this.height), aspect, 10, 10000000)
+		this._camera = new PerspectiveCamera(this.calcFov(this.height), aspect, 100, 10000000000)
 		this.controls = this.initCamera(props)
 		this.bindEvents()
 	}

@@ -1,5 +1,5 @@
 import { Vector2 } from 'three'
-import PerspectiveCamera from '@/camera/perspectiveCamera'
+import PerspectiveCamera from '@renderer/camera/perspectiveCamera'
 import Renderer from '../Renderer'
 import Scene from '../Scene'
 import Points from '../Points/Points'

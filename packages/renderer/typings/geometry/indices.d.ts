@@ -1,6 +1,6 @@
-import { TypedArray } from '../types';
-import { WebGPUBuffer } from '../backend/WebGPUBuffer';
-import { WebGPUBackend } from '../backend';
+import { TypedArray } from '@renderer/types';
+import { WebGPUBuffer } from '@renderer/backend/WebGPUBuffer';
+import { WebGPUBackend } from '@renderer/backend';
 declare class Index {
     private _name;
     private _array;

@@ -1,5 +1,5 @@
 import { Scene } from '@gmap/renderer'
-import { Extent } from '@/types'
+import { Extent } from '@map/types'
 import GMap from '..'
 
 export type LabelFields = { labelFields?: { field: number; title: string[] } }

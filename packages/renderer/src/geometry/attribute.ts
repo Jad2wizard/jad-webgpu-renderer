@@ -1,7 +1,7 @@
 /* eslint-disable no-undef */
-import { TypedArray } from '@/types'
-import { WebGPUBuffer, BufferType } from '@/backend/WebGPUBuffer'
-import { WebGPUBackend } from '@/backend'
+import { TypedArray } from '@renderer/types'
+import { WebGPUBuffer, BufferType } from '@renderer/backend/WebGPUBuffer'
+import { WebGPUBackend } from '@renderer/backend'
 
 type Options = {
 	shaderLocation?: number

@@ -3,7 +3,7 @@ import { Camera } from './camera/camera';
 import Renderer from './Renderer';
 import Geometry from './geometry/geometry';
 import Material from './material/material';
-import { IRenderable, TypedArray } from './types';
+import { IRenderable, TypedArray } from '@renderer/types';
 type Options = {};
 declare class Model implements IRenderable {
     protected _id: string;
