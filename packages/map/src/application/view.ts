@@ -16,7 +16,21 @@ type IProps = {
 
 const SHIFT = 16
 const CTRL = 17
-const defaultCameraHeight = 2000000000
+
+// Web Mercator 投影中，zoom 0 时地球赤道周长对应的分辨率（米/像素）
+const INITIAL_RESOLUTION = 156543.03392804097
+
+// 根据 zoom 级别和 FOV 计算相机高度
+function calcCameraHeightFromZoom(zoom: number, screenHeight: number, fov: number): number {
+	// 计算当前 zoom 级别的分辨率（米/像素）
+	const resolution = INITIAL_RESOLUTION / Math.pow(2, zoom)
+	// 相机高度 = (分辨率 * 屏幕高度 / 2) / tan(fov/2)
+	// fov 是以度为单位，需要转换为弧度
+	console.log(fov)
+	const fovRad = (fov * Math.PI) / 180
+	const halfScreenWorldSize = (resolution * screenHeight) / 2
+	return halfScreenWorldSize / Math.tan(fovRad / 2)
+}
 
 class View {
 	private tileMap: TileMap
@@ -35,7 +49,7 @@ class View {
 		this.tileMap = props.tileMap
 
 		const aspect = this.width / this.height
-		this._camera = new PerspectiveCamera(this.calcFov(this.height), aspect, 100, 10000000000)
+		this._camera = new PerspectiveCamera(this.calcFov(this.height), aspect, 1, 10000000)
 		this.controls = this.initCamera(props)
 		this.bindEvents()
 	}
@@ -51,6 +65,18 @@ class View {
 	public animate() {
 		this.camera.updateMatrixWorld()
 		this.camera.updateProjectionMatrix()
+	}
+
+	public resize(width: number, height: number) {
+		this.width = width
+		this.height = height
+		// 更新相机的宽高比
+		const aspect = this.width / this.height
+		this._camera.aspect = aspect
+		// 重新计算FOV以保持合适的视野
+		this._camera.fov = this.calcFov(this.height)
+		this._camera.updateProjectionMatrix()
+		this.onViewChange()
 	}
 
 	public lonlat2World(lon: number, lat: number) {
@@ -93,7 +119,13 @@ class View {
 	private initCamera(props: IProps) {
 		const center = props.center ? [props.center.lon, props.center.lat] : [120, 30]
 		const centerWorld = this.lonlat2World(center[0], center[1])
-		this.camera.position.set(centerWorld.x, centerWorld.y, defaultCameraHeight)
+
+		// 根据 TileMap 的默认 zoom 级别计算相机高度
+		const defaultZoom = this.tileMap.getView().getZoom() || 7
+		const fov = this.calcFov(this.height)
+		const cameraHeight = calcCameraHeightFromZoom(defaultZoom, this.height, fov)
+
+		this.camera.position.set(centerWorld.x, centerWorld.y, cameraHeight)
 		//@ts-ignore
 		window.cam = this.camera
 		const controls = new OrbitControls(this.camera, props.controlCanvas)
@@ -104,21 +136,40 @@ class View {
 		return controls
 	}
 
+	/**
+	 * 以1000像素高度下45度fov为基准，计算任意屏幕高度下的fov。以达到不同分辨率下相同的视觉比例
+	 * @param height 屏幕 像素高度
+	 * @returns 任意屏幕高度下的fov
+	 */
 	private calcFov(height: number) {
 		const tanAlpha: number = Math.tan((45 * Math.PI) / 360)
-		return (Math.atan2(height * tanAlpha, 1000) * 360) / Math.PI
+		return (Math.atan2(height, 1000 / tanAlpha) * 360) / Math.PI
 	}
 
 	private onViewChange = () => {
+		// 计算屏幕四个角的经纬度
+		const corners = [
+			this.screen2Lonlat(0, 0), // 左上角
+			this.screen2Lonlat(this.width, 0), // 右上角
+			this.screen2Lonlat(0, this.height), // 左下角
+			this.screen2Lonlat(this.width, this.height), // 右下角
+		]
+
+		// 提取所有经度和纬度值
+		const lons = corners.map((c) => c[0])
+		const lats = corners.map((c) => c[1])
+
+		// 计算真实的经纬度范围
+		const extent = {
+			w: Math.min(...lons), // 最西经度
+			e: Math.max(...lons), // 最东经度
+			s: Math.min(...lats), // 最南纬度
+			n: Math.max(...lats), // 最北纬度
+		}
+
+		const zoom = this.tileMap.calcZoomFromExtent(extent, this.width, this.height)
 		const { position } = this.camera
 		const center = this.world2Lonlat(new Vector2(position.x, position.y))
-
-		const ne = this.screen2Lonlat(this.width, 0)
-		const sw = this.screen2Lonlat(0, this.height)
-
-		const extent = { n: ne[1], e: ne[0], s: sw[1], w: sw[0] }
-		const zoom = this.tileMap.calcZoomFromExtent(extent, this.width, this.height)
-
 		this.tileMap.updateView({ center: { lon: center[0], lat: center[1] }, zoom })
 	}
 

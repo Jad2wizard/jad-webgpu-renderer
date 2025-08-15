@@ -18,22 +18,27 @@ type IProps = {
 	center?: { lon: number; lat: number }
 }
 
+const defaultZoom = 7
+
 class TileMap {
 	private olMap: OlMap
 	private tileLayer: TileLayer
+	private container: HTMLElement
 	constructor(props: IProps) {
 		const { container, tileLayer, center } = props
+		this.container = container
 		const _center = center ? fromLonLat([center.lon, center.lat]) : fromLonLat([120, 30])
 		this.olMap = new OlMap({
 			target: container,
 			layers: [tileLayer],
 			view: new View({
 				center: _center,
-				zoom: 7,
+				zoom: defaultZoom,
 				minZoom: 1,
 				maxZoom: 20,
 			}),
 			interactions: [],
+			controls: [], // 禁用所有默认控件（包括缩放控件）
 		})
 		this.tileLayer = tileLayer
 		//@ts-ignore
@@ -71,6 +76,8 @@ class TileMap {
 	}
 
 	public updateView(params: { center?: { lon: number; lat: number }; zoom?: number }) {
+		console.log(params.center)
+		console.log(params.zoom)
 		if (params.center) {
 			const center = fromLonLat([params.center.lon, params.center.lat])
 			this.getView().setCenter(center)
@@ -81,13 +88,30 @@ class TileMap {
 	}
 
 	public calcZoomFromExtent(extent: Extent, width: number, height: number) {
-		const resolution = this.getView().getResolutionForExtent(
-			[extent.w, extent.s, extent.e, extent.n],
-			[width, height]
-		)
+		// 将经纬度转换为 Web Mercator 坐标（米）
+		const sw = fromLonLat([extent.w, extent.s]) // 西南角
+		const ne = fromLonLat([extent.e, extent.n]) // 东北角
 
+		// 构建 OpenLayers 期望的 extent 格式 [minX, minY, maxX, maxY]
+		const olExtent = [sw[0], sw[1], ne[0], ne[1]]
+
+		const resolution = this.getView().getResolutionForExtent(olExtent, [width, height])
 		const zoom = this.getView().getZoomForResolution(resolution)
 		return zoom
+	}
+
+	// 处理容器大小变化
+	public resize() {
+		// 更新容器尺寸
+		if (this.container && this.container.parentElement) {
+			const parentWidth = this.container.parentElement.offsetWidth
+			const parentHeight = this.container.parentElement.offsetHeight
+			this.container.style.width = parentWidth + 'px'
+			this.container.style.height = parentHeight + 'px'
+		}
+		
+		// 通知 OpenLayers 地图更新尺寸
+		this.olMap.updateSize()
 	}
 }
 

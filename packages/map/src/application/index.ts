@@ -26,6 +26,7 @@ class GMap extends EventEmitter {
 	private container: HTMLDivElement
 	private extent: Extent
 	private active = true
+	private resizeObserver?: ResizeObserver
 
 	constructor(props: IProps) {
 		super()
@@ -36,9 +37,16 @@ class GMap extends EventEmitter {
 		this.tileMap = this.initTileMap({ ...props, extent: this.extent })
 		this.view = this.initView({ ...props, extent: this.extent }, this.renderer.canvas)
 
+		// 异步初始化渲染器
+		this.initRenderer().then(() => {
+			this.animate()
+		})
+
+		// 监听容器大小变化
+		this.initResizeObserver()
+
 		//@ts-ignore
 		window.map = this
-		this.animate()
 	}
 
 	getView() {
@@ -93,15 +101,54 @@ class GMap extends EventEmitter {
 		return viewInstance
 	}
 
+	private async initRenderer() {
+		await this.renderer.init()
+	}
+
+	private initResizeObserver() {
+		this.resizeObserver = new ResizeObserver(() => {
+			this.handleResize()
+		})
+		this.resizeObserver.observe(this.container)
+	}
+
+	private handleResize() {
+		// 确保渲染器已经初始化完成
+		if (this.renderer && this.renderer.canvas) {
+			try {
+				this.renderer.resize()
+				// 更新View的尺寸和相机投影矩阵
+				if (this.view) {
+					const canvas = this.renderer.canvas
+					this.view.resize(canvas.width, canvas.height)
+				}
+				// 更新地图瓦片容器尺寸
+				if (this.tileMap) {
+					this.tileMap.resize()
+				}
+			} catch (error) {
+				// 如果渲染器还没有完全初始化，忽略resize事件
+				console.warn('Renderer not fully initialized, skipping resize')
+			}
+		}
+	}
+
 	private animate = () => {
 		if (this.active) requestAnimationFrame(this.animate)
 		this.view.animate()
+		// 渲染散点图层
+		this.renderer.render(this._layerManager.scene, this.view.camera)
 	}
 
 	dispose() {
 		this._layerManager.dispose()
 		this.view.dispose()
 		this.removeAllListeners()
+		// 清理ResizeObserver
+		if (this.resizeObserver) {
+			this.resizeObserver.disconnect()
+			this.resizeObserver = undefined
+		}
 	}
 }
 
