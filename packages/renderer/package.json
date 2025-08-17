@@ -1,5 +1,5 @@
 {
-	"name": "@gmap/renderer",
+	"name": "@webgpu-gmap/renderer",
 	"version": "0.1.0",
 	"description": "a webgpu renderer for visualization",
 	"main": "lib/index.js",

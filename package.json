@@ -1,5 +1,5 @@
 {
-	"name": "gmap",
+	"name": "webgpu-gmap",
 	"private": true,
 	"workspaces": [
 		"packages/*"

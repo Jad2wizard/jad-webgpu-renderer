@@ -1,5 +1,5 @@
 import { Vector2, MOUSE, Raycaster, Plane, Vector3 } from 'three'
-import { PerspectiveCamera } from '@gmap/renderer'
+import { PerspectiveCamera } from '@webgpu-gmap/renderer'
 import proj4 from 'proj4'
 import { Extent } from '@map/types'
 import TileMap from './tile'

@@ -1,4 +1,4 @@
-import { Renderer as WebGPURenderer, Camera, Scene } from '@gmap/renderer'
+import { Renderer as WebGPURenderer, Camera, Scene } from '@webgpu-gmap/renderer'
 
 type IProps = {
 	container: HTMLElement

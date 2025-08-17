@@ -1,4 +1,4 @@
-import { Scene } from '@gmap/renderer'
+import { Scene } from '@webgpu-gmap/renderer'
 import { Extent } from '@map/types'
 import GMap from '..'
 

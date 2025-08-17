@@ -1,6 +1,6 @@
 import * as _ from 'lodash'
 import { IDataLayer, BaseLayer, IBaseLayerProps, Data, LabelFields, StyleParams } from './layer'
-import { Points } from '@gmap/renderer'
+import { Points } from '@webgpu-gmap/renderer'
 import { Color } from '@map/types'
 import { delay } from '@map/utils'
 import GMap from '..'

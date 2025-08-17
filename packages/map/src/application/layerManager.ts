@@ -1,6 +1,6 @@
 import { IBaseLayerProps, IDataLayer } from './dataLayers/layer'
 import GMap from '.'
-import { Scene } from '@gmap/renderer'
+import { Scene } from '@webgpu-gmap/renderer'
 import ScatterLayer, { IProps as ScatterLayerProps } from './dataLayers/scatterLayer'
 
 /** 支持的图层类型 */
