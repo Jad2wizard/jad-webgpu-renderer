@@ -9,3 +9,4 @@ typings/*
 **/*.js
 !**/webpack.config.js
 **/*.py
+packages/**/*/typings/
