@@ -1,0 +1,30 @@
+{
+	"name": "webgpu-node-examples",
+	"version": "1.0.0",
+	"description": "Node.js WebGPU 渲染示例",
+	"type": "module",
+	"scripts": {
+		"start": "node webgpu-offscreen-render.js",
+		"ol": "node ol-render-node.js"
+	},
+	"dependencies": {
+		"puppeteer": "^23.8.0",
+		"ol": "^10.7.0",
+		"pngjs": "^7.0.0",
+		"sharp": "^0.33.0",
+		"webgpu": "^0.3.8"
+	},
+	"optionalDependencies": {
+		"node-dawn": "^0.2.0"
+	},
+	"engines": {
+		"node": ">=18.0.0"
+	},
+	"keywords": [
+		"webgpu",
+		"node.js",
+		"gpu",
+		"rendering",
+		"compute-shader"
+	]
+}

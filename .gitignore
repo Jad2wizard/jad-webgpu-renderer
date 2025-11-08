@@ -7,8 +7,7 @@ dist/*.js
 diff.log
 **/lib/*
 typings/*
-**/*.js
+# **/*.js
 !**/webpack.config.js
 **/*.py
 packages/**/*/typings/
-packages/mcp/examples/
