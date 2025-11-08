@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client'
 import GMap from './application'
 import XYZ from 'ol/source/XYZ'
 import TileLayer from 'ol/layer/Tile'
-import { Points, Scene } from '@webgpu-gmap/renderer'
 
 const tile_url_template = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 

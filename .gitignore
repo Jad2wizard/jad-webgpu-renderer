@@ -1,4 +1,5 @@
 node_modules/*
+**/node_modules/
 node_modules_old/*
 dist/*.js
 *.DS_Store
@@ -10,3 +11,4 @@ typings/*
 !**/webpack.config.js
 **/*.py
 packages/**/*/typings/
+packages/mcp/examples/

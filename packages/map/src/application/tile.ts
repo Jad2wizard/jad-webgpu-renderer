@@ -22,7 +22,6 @@ const defaultZoom = 7
 
 class TileMap {
 	private olMap: OlMap
-	private tileLayer: TileLayer
 	private container: HTMLElement
 	constructor(props: IProps) {
 		const { container, tileLayer, center } = props
@@ -40,7 +39,6 @@ class TileMap {
 			interactions: [],
 			controls: [], // 禁用所有默认控件（包括缩放控件）
 		})
-		this.tileLayer = tileLayer
 		//@ts-ignore
 		window.from = fromLonLat
 	}
@@ -76,8 +74,6 @@ class TileMap {
 	}
 
 	public updateView(params: { center?: { lon: number; lat: number }; zoom?: number }) {
-		console.log(params.center)
-		console.log(params.zoom)
 		if (params.center) {
 			const center = fromLonLat([params.center.lon, params.center.lat])
 			this.getView().setCenter(center)
@@ -109,7 +105,7 @@ class TileMap {
 			this.container.style.width = parentWidth + 'px'
 			this.container.style.height = parentHeight + 'px'
 		}
-		
+
 		// 通知 OpenLayers 地图更新尺寸
 		this.olMap.updateSize()
 	}

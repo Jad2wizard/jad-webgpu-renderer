@@ -15,6 +15,9 @@ class Interacts {
 	private clickTimer: NodeJS.Timeout | null = null
 	private clickDelay = 250
 
+	// 点击和拖拽的距离阈值（像素）
+	private static readonly CLICK_THRESHOLD = 4
+
 	constructor(props: IProps) {
 		this.map = props.map
 		this.mouseCoord = { left: 0, top: 0, x: 0, y: 0 }
@@ -55,13 +58,13 @@ class Interacts {
 		if (
 			Math.abs(mouseCoord.left - this.mouseDownCoord.left) +
 				Math.abs(mouseCoord.top - this.mouseDownCoord.top) >
-			4
+			Interacts.CLICK_THRESHOLD
 		) {
 			return
 		}
 
 		if (!this.firstClickTime) {
-			this.firstClickTime = Date.now()
+			this.firstClickTime = performance.now()
 			this.clickTimer = setTimeout(() => {
 				if (e.button === 0) {
 					this.map.emit('click', mouseCoord)
@@ -86,6 +89,10 @@ class Interacts {
 		element.removeEventListener('mousedown', this.onMouseDown)
 		element.removeEventListener('mousemove', this.onMouseMove)
 		element.removeEventListener('mouseup', this.onMouseUp)
+		if (this.clickTimer) {
+			clearTimeout(this.clickTimer)
+			this.clickTimer = null
+		}
 	}
 }
 
