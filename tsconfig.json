@@ -12,11 +12,7 @@
 		"typeRoots": ["node_modules/@types", "node_modules/@webgpu/types"],
 		"baseUrl": "./",
 		"esModuleInterop": true,
-		"allowSyntheticDefaultImports": true,
-		"paths": {
-			"@map/*": ["packages/map/src/*"],
-			"@renderer/*": ["packages/renderer/src/*"]
-		}
+		"allowSyntheticDefaultImports": true
 	},
 	"exclude": ["node_modules"]
 }

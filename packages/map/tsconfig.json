@@ -4,7 +4,11 @@
 		"outDir": "./lib",
 		"declarationDir": "./typings",
 		"esModuleInterop": true,
-		"allowSyntheticDefaultImports": true
+		"allowSyntheticDefaultImports": true,
+		"baseUrl": ".",
+		"paths": {
+			"@map/*": ["src/*"]
+		}
 	},
 	"include": ["./src/**/*"],
 	"exclude": ["./typings/**/*"]

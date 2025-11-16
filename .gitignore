@@ -6,7 +6,7 @@ dist/*.js
 .idea/*
 diff.log
 **/lib/*
-typings/*
+**/typings/*
 # **/*.js
 !**/webpack.config.js
 **/*.py
