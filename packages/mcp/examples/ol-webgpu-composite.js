@@ -46,11 +46,12 @@ async function renderComposite() {
 	const scatterCount = parseInt(process.env.SCATTER_COUNT || process.env.WG_COUNT || '800', 10)
 	const pointSize = parseFloat(process.env.SCATTER_SIZE || process.env.WG_SIZE || '6')
 
-	console.log('🎯 OpenLayers + WebGPU 合成渲染器')
+	console.log('🎯 OpenLayers + WebGPU 合成渲染器 (双模式)')  
 	console.log(`📐 尺寸: ${width}x${height} @${dpr}x`)
 	console.log(`🗺️  地图中心: ${centerLon}, ${centerLat} (缩放: ${zoom})`)
 	console.log(`🔢 散点数量: ${scatterCount} (大小: ${pointSize}px)`)
 	console.log(`💾 输出文件: ${output}`)
+	console.log('🔄 使用双浏览器模式：无头模式渲染地图，有头模式渲染 WebGPU 散点')
 
 	// 有头模式配置 - 支持 WebGPU
 	const launchOptions = {
@@ -71,23 +72,59 @@ async function renderComposite() {
 		slowMo: 50, // 稍微放慢便于观察渲染过程
 	}
 
-	let browser
+	let mapBrowser, scatterBrowser
 	try {
-		// 启动浏览器
+		// 启动无头浏览器用于 OpenLayers 地图渲染
+		console.log('🚀 启动无头浏览器用于 OpenLayers 地图渲染...')
+		const headlessLaunchOptions = {
+			headless: 'new',
+			args: [
+				'--no-sandbox',
+				'--disable-setuid-sandbox',
+				'--enable-gpu-rasterization',
+				'--disable-gpu',
+				'--window-size=1280,800'
+			],
+			defaultViewport: { width, height, deviceScaleFactor: dpr }
+		}
+		
 		try {
-			browser = await puppeteer.launch({ ...launchOptions, channel: 'chrome' })
+			mapBrowser = await puppeteer.launch({ ...headlessLaunchOptions, channel: 'chrome' })
 		} catch (_) {
-			const fallback =
-				process.env.CHROME_PATH ||
-				'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-			browser = await puppeteer.launch({ ...launchOptions, executablePath: fallback })
+			const fallback = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+			mapBrowser = await puppeteer.launch({ ...headlessLaunchOptions, executablePath: fallback })
 		}
 
-		console.log('🚀 浏览器启动成功，正在配置 WebGPU 支持...')
+		// 启动有头浏览器用于 WebGPU 散点渲染
+		console.log('🚀 启动有头浏览器用于 WebGPU 散点渲染...')
+		const headedLaunchOptions = {
+			headless: false, // 关键：必须使用有头模式才能支持 WebGPU
+			args: [
+				'--no-sandbox',
+				'--disable-setuid-sandbox',
+				'--enable-unsafe-webgpu', // 启用 WebGPU
+				'--enable-gpu-rasterization',
+				'--enable-features=Vulkan',
+				'--use-angle=metal',
+				'--ignore-gpu-blocklist',
+				'--disable-gpu-sandbox',
+				'--allow-file-access-from-files', // 允许访问本地文件
+				'--window-size=1280,800'
+			],
+			defaultViewport: { width, height, deviceScaleFactor: dpr },
+			slowMo: 50 // 稍微放慢便于观察渲染过程
+		}
+		
+		try {
+			scatterBrowser = await puppeteer.launch({ ...headedLaunchOptions, channel: 'chrome' })
+		} catch (_) {
+			const fallback = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+			scatterBrowser = await puppeteer.launch({ ...headedLaunchOptions, executablePath: fallback })
+		}
 
-		// 渲染地图
-		console.log('🗺️  开始渲染 OpenLayers 地图...')
-		const mapPath = await renderOL(browser, {
+		// 渲染地图（使用无头浏览器）
+		console.log('🗺️  开始渲染 OpenLayers 地图（无头模式）...')
+		const mapPath = await renderOL(mapBrowser, {
 			width,
 			height,
 			dpr,
@@ -97,9 +134,9 @@ async function renderComposite() {
 			tileUrl,
 		})
 
-		// 渲染散点
-		console.log('✨ 开始渲染 WebGPU 散点...')
-		const scatterPath = await renderScatter(browser, {
+		// 渲染散点（使用有头浏览器）
+		console.log('✨ 开始渲染 WebGPU 散点（有头模式）...')
+		const scatterPath = await renderScatter(scatterBrowser, {
 			width,
 			height,
 			dpr,
@@ -114,13 +151,21 @@ async function renderComposite() {
 			.toFile(output)
 
 		console.log(`🎉 合成完成！输出文件: ${output}`)
-
+		
 		// 显示文件信息
 		const stats = fs.statSync(output)
 		console.log(`📊 文件大小: ${(stats.size / 1024).toFixed(1)} KB`)
+		
+	} catch (error) {
+		console.error('❌ 渲染过程出错:', error.message)
+		throw error
 	} finally {
-		if (browser) {
-			await browser.close()
+		// 清理浏览器实例
+		if (mapBrowser) {
+			await mapBrowser.close()
+		}
+		if (scatterBrowser) {
+			await scatterBrowser.close()
 		}
 	}
 }
