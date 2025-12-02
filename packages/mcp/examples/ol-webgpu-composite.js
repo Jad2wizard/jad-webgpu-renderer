@@ -2,17 +2,19 @@ import puppeteer from 'puppeteer'
 import { createRequire } from 'module'
 import sharp from 'sharp'
 import fs from 'fs'
+import { create, globals } from 'webgpu'
+import { createCanvas } from 'canvas'
 const require = createRequire(import.meta.url)
 
 /**
  * 最终版：OpenLayers + WebGPU 散点合成渲染器
  *
  * 功能特点：
- * 1. 使用 Puppeteer 有头模式确保 WebGPU 支持
- * 2. 禁用自动化检测绕过 WebGPU 限制
+ * 1. 使用 Puppeteer 无头模式渲染 OpenLayers 地图
+ * 2. 使用 Node.js WebGPU 直接渲染散点（无需浏览器）
  * 3. 分别渲染 OpenLayers 地图和 WebGPU 散点
- * 4. 使用本地 HTML 文件确保干净的散点渲染环境
- * 5. 生成透明背景的散点图片用于合成
+ * 4. 生成透明背景的散点图片用于合成
+ * 5. 优化的性能，减少浏览器依赖
  *
  * 使用方法：
  * node ol-webgpu-composite.js
@@ -51,7 +53,7 @@ async function renderComposite() {
 	console.log(`🗺️  地图中心: ${centerLon}, ${centerLat} (缩放: ${zoom})`)
 	console.log(`🔢 散点数量: ${scatterCount} (大小: ${pointSize}px)`)
 	console.log(`💾 输出文件: ${output}`)
-	console.log('🔄 使用双浏览器模式：无头模式渲染地图，有头模式渲染 WebGPU 散点')
+	console.log('🔄 使用混合模式：无头浏览器渲染地图，Node.js WebGPU 渲染散点')
 
 	// 有头模式配置 - 支持 WebGPU
 	const launchOptions = {
@@ -72,7 +74,7 @@ async function renderComposite() {
 		slowMo: 50, // 稍微放慢便于观察渲染过程
 	}
 
-	let mapBrowser, scatterBrowser
+	let mapBrowser
 	try {
 		// 启动无头浏览器用于 OpenLayers 地图渲染
 		console.log('🚀 启动无头浏览器用于 OpenLayers 地图渲染...')
@@ -95,32 +97,7 @@ async function renderComposite() {
 			mapBrowser = await puppeteer.launch({ ...headlessLaunchOptions, executablePath: fallback })
 		}
 
-		// 启动有头浏览器用于 WebGPU 散点渲染
-		console.log('🚀 启动有头浏览器用于 WebGPU 散点渲染...')
-		const headedLaunchOptions = {
-			headless: false, // 关键：必须使用有头模式才能支持 WebGPU
-			args: [
-				'--no-sandbox',
-				'--disable-setuid-sandbox',
-				'--enable-unsafe-webgpu', // 启用 WebGPU
-				'--enable-gpu-rasterization',
-				'--enable-features=Vulkan',
-				'--use-angle=metal',
-				'--ignore-gpu-blocklist',
-				'--disable-gpu-sandbox',
-				'--allow-file-access-from-files', // 允许访问本地文件
-				'--window-size=1280,800'
-			],
-			defaultViewport: { width, height, deviceScaleFactor: dpr },
-			slowMo: 50 // 稍微放慢便于观察渲染过程
-		}
-		
-		try {
-			scatterBrowser = await puppeteer.launch({ ...headedLaunchOptions, channel: 'chrome' })
-		} catch (_) {
-			const fallback = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-			scatterBrowser = await puppeteer.launch({ ...headedLaunchOptions, executablePath: fallback })
-		}
+
 
 		// 渲染地图（使用无头浏览器）
 		console.log('🗺️  开始渲染 OpenLayers 地图（无头模式）...')
@@ -134,9 +111,9 @@ async function renderComposite() {
 			tileUrl,
 		})
 
-		// 渲染散点（使用有头浏览器）
-		console.log('✨ 开始渲染 WebGPU 散点（有头模式）...')
-		const scatterPath = await renderScatter(scatterBrowser, {
+		// 渲染散点（使用 Node.js WebGPU）
+		console.log('✨ 开始渲染 WebGPU 散点（Node.js 模式）...')
+		const scatterPath = await renderScatterNode({
 			width,
 			height,
 			dpr,
@@ -163,9 +140,6 @@ async function renderComposite() {
 		// 清理浏览器实例
 		if (mapBrowser) {
 			await mapBrowser.close()
-		}
-		if (scatterBrowser) {
-			await scatterBrowser.close()
 		}
 	}
 }
@@ -256,252 +230,176 @@ async function renderOL(browser, { width, height, dpr, centerLon, centerLat, zoo
 	return out
 }
 
-async function renderScatter(browser, { width, height, dpr, scatterCount, pointSize }) {
-	const page = await browser.newPage()
-	page.on('console', (msg) => console.log('[WG]', msg.type(), msg.text()))
-	page.on('pageerror', (err) => console.error('[WG ERROR]', err))
-
-	// 关键：禁用自动化检测以确保 WebGPU 可用
-	await page.evaluateOnNewDocument(() => {
-		Object.defineProperty(navigator, 'webdriver', {
-			get: () => undefined,
-			set: () => {},
-			configurable: true,
-		})
-
-		// 确保有正常的 Chrome 环境
-		window.chrome = window.chrome || {
-			runtime: {},
-			loadTimes: () => ({}),
-			csi: () => ({}),
-		}
-	})
-
-	// 创建临时 HTML 文件以确保干净的渲染环境
-	const tempHtmlPath = `/tmp/webgpu-scatter-${Date.now()}.html`
-
-	const htmlContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>WebGPU Scatter Renderer</title>
-    <style>
-        * { margin: 0; padding: 0; }
-        body { background: transparent; overflow: hidden; }
-        #canvas-container {
-            width: ${width}px;
-            height: ${height}px;
-            position: relative;
-            background: transparent;
-        }
-        canvas { display: block; background: transparent; }
-    </style>
-</head>
-<body>
-    <div id="canvas-container">
-        <canvas id="scatter-canvas" width="${width}" height="${height}"></canvas>
-    </div>
-    
-    <script>
-        async function renderScatter() {
-            const canvas = document.getElementById('scatter-canvas');
-            const width = ${width};
-            const height = ${height};
-            const count = ${scatterCount};
-            const pointSize = ${pointSize};
-            
-            try {
-                // 1. 检测 WebGPU
-                if (!navigator.gpu) throw new Error('WebGPU not supported');
-                
-                // 2. 获取适配器
-                const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) throw new Error('No WebGPU adapter');
-                
-                // 3. 获取设备
-                const device = await adapter.requestDevice({
-                    requiredLimits: {
-                        maxBufferSize: 128 * 1024 * 1024,
-                        maxStorageBufferBindingSize: 128 * 1024 * 1024
-                    }
-                });
-                
-                // 4. 获取上下文
-                const context = canvas.getContext('webgpu');
-                if (!context) throw new Error('No WebGPU context');
-                
-                // 5. 配置上下文
-                const format = navigator.gpu.getPreferredCanvasFormat();
-                context.configure({ device, format, alphaMode: 'premultiplied' });
-                
-                // 6. 生成散点数据
-                const positions = new Float32Array(count * 2);
-                for (let i = 0; i < count; i++) {
-                    positions[i * 2] = (Math.random() * 2 - 1) * 0.95;
-                    positions[i * 2 + 1] = (Math.random() * 2 - 1) * 0.95;
-                }
-                
-                // 7. 创建缓冲区
-                const posBuffer = device.createBuffer({
-                    size: positions.byteLength,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-                });
-                device.queue.writeBuffer(posBuffer, 0, positions);
-                
-                // 8. 参数缓冲区
-                const sizeX = (2 * pointSize) / width;
-                const sizeY = (2 * pointSize) / height;
-                const paramsData = new Float32Array([sizeX, sizeY, width, height]);
-                const paramsBuffer = device.createBuffer({
-                    size: paramsData.byteLength,
-                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-                });
-                device.queue.writeBuffer(paramsBuffer, 0, paramsData);
-                
-                // 9. 着色器 - 带渐变颜色
-                const shader = \`
-                    struct VSOut {
-                        @builtin(position) pos: vec4<f32>,
-                        @location(0) color: vec3<f32>,
-                    };
-                    
-                    @group(0) @binding(0) var<storage, read> positions: array<vec2<f32>>;
-                    @group(0) @binding(1) var<uniform> params: vec4<f32>;
-                    
-                    @vertex
-                    fn vs(@builtin(vertex_index) vid: u32, @builtin(instance_index) iid: u32) -> VSOut {
-                        let center = positions[iid];
-                        var corner: vec2<f32>;
-                        switch (vid) {
-                            case 0: { corner = vec2<f32>(-1.0, -1.0); }
-                            case 1: { corner = vec2<f32>( 1.0, -1.0); }
-                            case 2: { corner = vec2<f32>(-1.0,  1.0); }
-                            case 3: { corner = vec2<f32>( 1.0,  1.0); }
-                            default: { corner = vec2<f32>(0.0, 0.0); }
-                        }
-                        let halfSize = vec2<f32>(params.x, params.y) * 0.5;
-                        let pos = center + corner * halfSize;
-                        var out: VSOut;
-                        out.pos = vec4<f32>(pos, 0.0, 1.0);
-                        
-                        // 基于索引的渐变颜色
-                        let colorFactor = f32(iid) / f32(arrayLength(&positions));
-                        out.color = vec3<f32>(0.1 + colorFactor * 0.7, 0.8, 1.0 - colorFactor * 0.5);
-                        
-                        return out;
-                    }
-                    
-                    @fragment
-                    fn fs(in: VSOut) -> @location(0) vec4<f32> {
-                        return vec4<f32>(in.color, 1.0);
-                    }
-                \`;
-                
-                // 10. 渲染管线
-                const module = device.createShaderModule({ code: shader });
-                const pipeline = device.createRenderPipeline({
-                    layout: 'auto',
-                    vertex: { module, entryPoint: 'vs' },
-                    fragment: { module, entryPoint: 'fs', targets: [{ format }] },
-                    primitive: { topology: 'triangle-strip' }
-                });
-                
-                // 11. 绑定组
-                const bindGroup = device.createBindGroup({
-                    layout: pipeline.getBindGroupLayout(0),
-                    entries: [
-                        { binding: 0, resource: { buffer: posBuffer } },
-                        { binding: 1, resource: { buffer: paramsBuffer } }
-                    ]
-                });
-                
-                // 12. 渲染 - 透明背景
-                const encoder = device.createCommandEncoder();
-                const pass = encoder.beginRenderPass({
-                    colorAttachments: [{
-                        view: context.getCurrentTexture().createView(),
-                        loadOp: 'clear',
-                        clearValue: { r: 0, g: 0, b: 0, a: 0 }, // 透明背景
-                        storeOp: 'store'
-                    }]
-                });
-                pass.setPipeline(pipeline);
-                pass.setBindGroup(0, bindGroup);
-                pass.draw(4, count);
-                pass.end();
-                device.queue.submit([encoder.finish()]);
-                
-                // 标记完成
-                window.__scatterRendered = true;
-                window.__renderInfo = {
-                    success: true,
-                    count: count,
-                    format: format,
-                    dimensions: { width, height }
-                };
-                
-            } catch (error) {
-                window.__scatterRendered = false;
-                window.__renderError = error.message;
-                console.error('WebGPU 渲染失败:', error);
-            }
-        }
-        
-        // 运行渲染
-        renderScatter();
-    </script>
-</body>
-</html>`
-
-	// 保存 HTML 文件
-	fs.writeFileSync(tempHtmlPath, htmlContent)
-	console.log('✅ 临时 HTML 文件已创建')
-
+async function renderScatterNode({ width, height, dpr, scatterCount, pointSize }) {
+	console.log('✨ 开始渲染 WebGPU 散点（Node.js 模式）...')
+	
 	try {
-		// 访问本地 HTML 文件
-		const fileUrl = `file://${tempHtmlPath}`
-		console.log('🌐 访问本地文件:', fileUrl)
-		await page.goto(fileUrl, { waitUntil: 'domcontentloaded' })
-
-		// 等待渲染完成
-		console.log('⏳ 等待 WebGPU 渲染完成...')
-		await page.waitForFunction(
-			() => window.__scatterRendered === true || window.__renderError !== undefined,
-			{ timeout: 30000, polling: 200 }
-		)
-
-		// 检查结果
-		const result = await page.evaluate(() => ({
-			success: window.__scatterRendered || false,
-			info: window.__renderInfo || null,
-			error: window.__renderError || null,
-		}))
-
-		if (!result.success) {
-			throw new Error(`WebGPU 渲染失败: ${result.error}`)
-		}
-
-		console.log('✅ WebGPU 渲染完成:', result.info)
-
-		// 截图 - 只截取 Canvas 元素
-		console.log('📸 截取散点图片...')
-		const canvasElement = await page.$('#scatter-canvas')
-		const out = 'webgpu-overlay.png'
-		await canvasElement.screenshot({
-			path: out,
-			type: 'png',
-			omitBackground: true, // 关键：透明背景
+		// 设置 WebGPU 全局变量
+		Object.assign(globalThis, globals)
+		const navigator = { gpu: create([]) }
+		
+		// 获取适配器
+		const adapter = await navigator.gpu.requestAdapter()
+		if (!adapter) throw new Error('No WebGPU adapter')
+		
+		// 获取设备
+		const device = await adapter.requestDevice({
+			requiredLimits: {
+				maxBufferSize: 128 * 1024 * 1024,
+				maxStorageBufferBindingSize: 128 * 1024 * 1024
+			}
 		})
-
+		
+		// 创建 Canvas (离屏渲染)
+		const canvas = createCanvas(width, height)
+		const context = canvas.getContext('2d') // 用于最终输出
+		
+		// 创建 WebGPU 纹理用于渲染
+		const texture = device.createTexture({
+			size: { width, height },
+			format: 'rgba8unorm',
+			usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+		})
+		
+		// 生成散点数据
+		const positions = new Float32Array(scatterCount * 2)
+		for (let i = 0; i < scatterCount; i++) {
+			positions[i * 2] = (Math.random() * 2 - 1) * 0.95
+			positions[i * 2 + 1] = (Math.random() * 2 - 1) * 0.95
+		}
+		
+		// 创建缓冲区
+		const posBuffer = device.createBuffer({
+			size: positions.byteLength,
+			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+		})
+		device.queue.writeBuffer(posBuffer, 0, positions)
+		
+		// 参数缓冲区
+		const sizeX = (2 * pointSize) / width
+		const sizeY = (2 * pointSize) / height
+		const paramsData = new Float32Array([sizeX, sizeY, width, height])
+		const paramsBuffer = device.createBuffer({
+			size: paramsData.byteLength,
+			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+		})
+		device.queue.writeBuffer(paramsBuffer, 0, paramsData)
+		
+		// WebGPU 着色器代码
+		const shaderCode = `
+			struct VSOut {
+				@builtin(position) pos: vec4<f32>,
+				@location(0) color: vec3<f32>,
+			};
+			
+			@group(0) @binding(0) var<storage, read> positions: array<vec2<f32>>;
+			@group(0) @binding(1) var<uniform> params: vec4<f32>;
+			
+			@vertex
+			fn vs(@builtin(vertex_index) vid: u32, @builtin(instance_index) iid: u32) -> VSOut {
+				let center = positions[iid];
+				var corner: vec2<f32>;
+				switch (vid) {
+					case 0: { corner = vec2<f32>(-1.0, -1.0); }
+					case 1: { corner = vec2<f32>( 1.0, -1.0); }
+					case 2: { corner = vec2<f32>(-1.0,  1.0); }
+					case 3: { corner = vec2<f32>( 1.0,  1.0); }
+					default: { corner = vec2<f32>(0.0, 0.0); }
+				}
+				let halfSize = vec2<f32>(params.x, params.y) * 0.5;
+				let pos = center + corner * halfSize;
+				var out: VSOut;
+				out.pos = vec4<f32>(pos, 0.0, 1.0);
+				
+				// 基于索引的渐变颜色
+				let colorFactor = f32(iid) / f32(arrayLength(&positions));
+				out.color = vec3<f32>(0.1 + colorFactor * 0.7, 0.8, 1.0 - colorFactor * 0.5);
+				
+				return out;
+			}
+			
+			@fragment
+			fn fs(in: VSOut) -> @location(0) vec4<f32> {
+				return vec4<f32>(in.color, 1.0);
+			}
+		`
+		
+		// 创建渲染管线
+		const shaderModule = device.createShaderModule({ code: shaderCode })
+		const pipeline = device.createRenderPipeline({
+			layout: 'auto',
+			vertex: { module: shaderModule, entryPoint: 'vs' },
+			fragment: { 
+				module: shaderModule, 
+				entryPoint: 'fs', 
+				targets: [{ format: 'rgba8unorm' }] 
+			},
+			primitive: { topology: 'triangle-strip' }
+		})
+		
+		// 创建绑定组
+		const bindGroup = device.createBindGroup({
+			layout: pipeline.getBindGroupLayout(0),
+			entries: [
+				{ binding: 0, resource: { buffer: posBuffer } },
+				{ binding: 1, resource: { buffer: paramsBuffer } }
+			]
+		})
+		
+		// 创建输出缓冲区
+		const outputBuffer = device.createBuffer({
+			size: width * height * 4, // RGBA
+			usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+		})
+		
+		// 渲染命令
+		const encoder = device.createCommandEncoder()
+		const renderPass = encoder.beginRenderPass({
+			colorAttachments: [{
+				view: texture.createView(),
+				loadOp: 'clear',
+				clearValue: { r: 0, g: 0, b: 0, a: 0 }, // 透明背景
+				storeOp: 'store'
+			}]
+		})
+		renderPass.setPipeline(pipeline)
+		renderPass.setBindGroup(0, bindGroup)
+		renderPass.draw(4, scatterCount)
+		renderPass.end()
+		
+		// 复制纹理到缓冲区
+		encoder.copyTextureToBuffer(
+			{ texture },
+			{ buffer: outputBuffer, bytesPerRow: width * 4 },
+			{ width, height }
+		)
+		
+		device.queue.submit([encoder.finish()])
+		
+		// 读取渲染结果
+		await outputBuffer.mapAsync(GPUMapMode.READ)
+		const outputData = new Uint8Array(outputBuffer.getMappedRange())
+		
+		// 创建 ImageData 并绘制到 Canvas
+		const imageData = context.createImageData(width, height)
+		imageData.data.set(outputData)
+		context.putImageData(imageData, 0, 0)
+		
+		// 保存为 PNG
+		const out = 'webgpu-overlay.png'
+		const buffer = canvas.toBuffer('image/png')
+		fs.writeFileSync(out, buffer)
+		
+		// 清理
+		outputBuffer.unmap()
+		
+		console.log(`✅ WebGPU 散点渲染完成: ${scatterCount} 个点`)
 		console.log(`[OK] 散点已输出: ${out} (${width}x${height} @${dpr}x)`)
 		return out
-	} finally {
-		await page.close()
-		// 清理临时文件
-		try {
-			fs.unlinkSync(tempHtmlPath)
-			console.log('🧹 临时文件已清理')
-		} catch (e) {}
+		
+	} catch (error) {
+		console.error('❌ WebGPU 渲染失败:', error.message)
+		throw error
 	}
 }
 
