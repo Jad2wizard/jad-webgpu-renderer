@@ -11,3 +11,5 @@ diff.log
 !**/webpack.config.js
 **/*.py
 packages/**/*/typings/
+*.iife.js*
+*.png

@@ -11,5 +11,5 @@
 		}
 	},
 	"include": ["./src/**/*"],
-	"exclude": ["./typings/**/*"]
+	"exclude": ["./typings/**/*", "./src/iife-entry.ts"]
 }

@@ -3,7 +3,7 @@ import { PerspectiveCamera } from '@webgpu-gmap/renderer'
 import proj4 from 'proj4'
 import { Extent } from '@map/types'
 import TileMap from './tile'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 type IProps = {
 	tileMap: TileMap
