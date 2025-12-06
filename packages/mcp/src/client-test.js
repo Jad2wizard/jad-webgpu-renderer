@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
+import fs from 'fs'
 
 async function main() {
 	console.log('Starting MCP client...')
@@ -25,15 +26,27 @@ async function main() {
 		const tools = await client.listTools()
 		console.log('Tools:', JSON.stringify(tools, null, 2))
 
-		console.log("Calling 'add' tool with a=10, b=20...")
-		const result = await client.callTool({
-			name: 'add',
+		console.log("Calling 'render_scatter_map' tool...")
+		const mapResult = await client.callTool({
+			name: 'render_scatter_map',
 			arguments: {
-				a: 10,
-				b: 20,
+				count: 500000,
+				color: [0.8, 0.2, 0.2, 0.1],
+				radius: 4,
+				width: 800,
+				height: 600,
 			},
 		})
-		console.log('Result:', JSON.stringify(result))
+
+		if (mapResult.content && mapResult.content[0] && mapResult.content[0].type === 'image') {
+			console.log('Map Result: Received image content')
+			const base64Data = mapResult.content[0].data
+			const buffer = Buffer.from(base64Data, 'base64')
+			fs.writeFileSync('test-scatter.png', buffer)
+			console.log('Saved test-scatter.png')
+		} else {
+			console.log('Map Result:', JSON.stringify(mapResult, null, 2))
+		}
 	} catch (error) {
 		console.error('Error:', error)
 	} finally {

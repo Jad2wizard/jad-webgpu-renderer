@@ -45,7 +45,7 @@ async function renderScatterMap() {
 	const page = await browser.newPage()
 	await page.setViewport({ width, height, deviceScaleFactor: 2 })
 
-	const mapIifePath = path.resolve(__dirname, '../../map/dist/map.iife.js')
+	const mapIifePath = path.resolve(__dirname, '../map/dist/map.iife.js')
 	const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
