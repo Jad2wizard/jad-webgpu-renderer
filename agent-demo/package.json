@@ -1,0 +1,23 @@
+{
+	"name": "agent-demo",
+	"version": "1.0.0",
+	"description": "A simple agent demo with MCP integration",
+	"main": "server.js",
+	"scripts": {
+		"start": "node server.js"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "module",
+	"dependencies": {
+		"@langchain/openai": "^1.1.3",
+		"@modelcontextprotocol/sdk": "^1.24.3",
+		"dotenv": "^17.2.3",
+		"eventsource": "^4.1.0",
+		"express": "^5.2.1",
+		"json-schema-to-zod": "^2.7.0",
+		"langchain": "^1.1.5",
+		"zod": "^4.1.13"
+	}
+}
