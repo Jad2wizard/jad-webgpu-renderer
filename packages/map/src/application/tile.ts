@@ -62,17 +62,6 @@ class TileMap {
 		return this.getView().getResolution()
 	}
 
-	//获取单位度/像素的分辨率
-	public getResolutionInDegree() {
-		const resolutionInMeter = this.getResolution()
-		if (!resolutionInMeter) return null
-		const center = this.getCenter()
-		if (!center) return null
-		const latitude = center[1]
-		const metersPerDegree = METERS_PER_DEGREE_AT_EQUATOR * Math.cos((latitude * Math.PI) / 180)
-		return resolutionInMeter / metersPerDegree
-	}
-
 	public updateView(params: { center?: { lon: number; lat: number }; zoom?: number }) {
 		if (params.center) {
 			const center = fromLonLat([params.center.lon, params.center.lat])
@@ -81,19 +70,6 @@ class TileMap {
 		if (params.zoom) {
 			this.getView().setZoom(params.zoom)
 		}
-	}
-
-	public calcZoomFromExtent(extent: Extent, width: number, height: number) {
-		// 将经纬度转换为 Web Mercator 坐标（米）
-		const sw = fromLonLat([extent.w, extent.s]) // 西南角
-		const ne = fromLonLat([extent.e, extent.n]) // 东北角
-
-		// 构建 OpenLayers 期望的 extent 格式 [minX, minY, maxX, maxY]
-		const olExtent = [sw[0], sw[1], ne[0], ne[1]]
-
-		const resolution = this.getView().getResolutionForExtent(olExtent, [width, height])
-		const zoom = this.getView().getZoomForResolution(resolution)
-		return zoom
 	}
 
 	// 处理容器大小变化

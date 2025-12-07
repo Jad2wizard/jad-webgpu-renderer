@@ -146,30 +146,28 @@ class View {
 		return (Math.atan2(height, 1000 / tanAlpha) * 360) / Math.PI
 	}
 
+	/**
+	 * 核心同步方法：当 Three.js 相机（Controls）发生变化时，同步更新 OpenLayers 地图视图
+	 * 优化：移除昂贵的射线检测 (Raycasting)，改为基于相机高度的纯数学计算 (O(1))
+	 */
 	private onViewChange = () => {
-		// 计算屏幕四个角的经纬度
-		const corners = [
-			this.screen2Lonlat(0, 0), // 左上角
-			this.screen2Lonlat(this.width, 0), // 右上角
-			this.screen2Lonlat(0, this.height), // 左下角
-			this.screen2Lonlat(this.width, this.height), // 右下角
-		]
+		// 1. 性能优化：直接根据相机高度计算 Zoom
+		// 原理：Resolution = (VisibleWorldHeight) / ScreenHeight
+		// VisibleWorldHeight = 2 * CameraHeight * tan(fov/2)
+		const fovRad = (this.camera.fov * Math.PI) / 180
+		const resolution = (this.camera.position.z * Math.tan(fovRad / 2) * 2) / this.height
 
-		// 提取所有经度和纬度值
-		const lons = corners.map((c) => c[0])
-		const lats = corners.map((c) => c[1])
+		// 反推 Zoom 公式原理：
+		// 在 Web Mercator 投影中，Zoom 0 的分辨率为 R0
+		// 每一级 Zoom 的分辨率是上一级的一半：Rz = R0 / (2^z)
+		// 因此：2^z = R0 / Rz  =>  z = log2(R0 / Rz)
+		const zoom = Math.log2(INITIAL_RESOLUTION / resolution)
 
-		// 计算真实的经纬度范围
-		const extent = {
-			w: Math.min(...lons), // 最西经度
-			e: Math.max(...lons), // 最东经度
-			s: Math.min(...lats), // 最南纬度
-			n: Math.max(...lats), // 最北纬度
-		}
-
-		const zoom = this.tileMap.calcZoomFromExtent(extent, this.width, this.height)
+		// 2. 根据 3D 相机的中心位置计算地图中心点
 		const { position } = this.camera
 		const center = this.world2Lonlat(new Vector2(position.x, position.y))
+
+		// 3. 执行同步
 		this.tileMap.updateView({ center: { lon: center[0], lat: center[1] }, zoom })
 	}
 

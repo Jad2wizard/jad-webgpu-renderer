@@ -91,11 +91,11 @@ class Storage {
 					type: BufferType.STORAGE,
 					resourceName: this._name,
 					size: this._value.byteLength,
-					initialData: this._value.buffer,
+					initialData: this._value.buffer as ArrayBuffer,
 				})
 			} else {
 				// 更新现有 buffer
-				backend.updateBuffer(this._buffer, this._value.buffer)
+				backend.updateBuffer(this._buffer, this._value.buffer as ArrayBuffer)
 			}
 			this.needsUpdate = false
 			return true

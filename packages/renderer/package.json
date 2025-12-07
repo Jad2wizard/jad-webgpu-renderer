@@ -6,7 +6,7 @@
 	"types": "typings/index.d.ts",
 	"scripts": {
 		"start": "webpack serve",
-		"build": "npm run clear-output && tsc && tsc-alias",
+		"build": "npm run clear-output && tsc && tsc-alias && tsc-alias -p tsconfig.json --outDir ./typings",
 		"build:iife": "node esbuild.config.js",
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"format": "prettier --write \"src/**/*.{ts,tsx,css,scss,html,json,md}\"",

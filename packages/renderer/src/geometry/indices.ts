@@ -48,11 +48,11 @@ class Index {
 					type: BufferType.INDEX,
 					resourceName: 'index',
 					size: this._array.byteLength,
-					initialData: this._array.buffer,
+					initialData: this._array.buffer as ArrayBuffer,
 				})
 			} else {
 				// 更新现有 buffer
-				backend.updateBuffer(this._buffer, this._array.buffer)
+				backend.updateBuffer(this._buffer, this._array.buffer as ArrayBuffer)
 			}
 			this.needsUpdate = false
 			return true

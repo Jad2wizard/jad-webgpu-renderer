@@ -10,7 +10,6 @@
 			"@map/*": ["src/*"]
 		},
 		"jsx": "react-jsx",
-		"types": ["react", "react-dom", "node"],
 		"lib": ["dom", "dom.iterable", "esnext"]
 	},
 	"include": ["./src/**/*"],

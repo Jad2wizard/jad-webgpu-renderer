@@ -137,7 +137,10 @@ export class BufferManager {
 		const arrayBuffer =
 			data instanceof ArrayBuffer
 				? data
-				: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+				: (data.buffer.slice(
+						data.byteOffset,
+						data.byteOffset + data.byteLength
+					) as ArrayBuffer)
 		buffer.updateData(arrayBuffer, offset)
 	}
 
