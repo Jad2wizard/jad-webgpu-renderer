@@ -16,7 +16,6 @@ import Attribute from './geometry/attribute'
 export {
 	Renderer,
 	Scene,
-	Camera,
 	PerspectiveCamera,
 	OrthographicCamera,
 	Model,
@@ -29,3 +28,4 @@ export {
 	Geometry,
 	Attribute,
 }
+export type { Camera }

@@ -7,11 +7,15 @@
 		"allowSyntheticDefaultImports": true,
 		"baseUrl": ".",
 		"paths": {
-			"@map/*": ["src/*"]
+			"@map/*": ["src/*"],
+			"@renderer/*": ["../renderer/src/*"],
+			"@webgpu-gmap/renderer": ["../renderer/src/index.ts"]
 		},
 		"jsx": "react-jsx",
+		"types": ["react", "react-dom", "node"],
+		"typeRoots": ["../../node_modules/@types"],
 		"lib": ["dom", "dom.iterable", "esnext"]
 	},
-	"include": ["./src/**/*"],
+	"include": ["./src/**/*", "../../node_modules/@webgpu/types/dist/index.d.ts"],
 	"exclude": ["./typings/**/*", "./src/iife-entry.ts"]
 }
