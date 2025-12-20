@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 import { TypedArray } from '@renderer/types'
-import { WebGPUBuffer, BufferType } from '@renderer/backend/WebGPUBuffer'
+import { Buffer, BufferType } from '@renderer/backend/Buffer'
 import { WebGPUBackend } from '@renderer/backend'
 
 type Options = {
@@ -13,7 +13,7 @@ class Attribute {
 	private _name: string
 	private _array: TypedArray
 	private _itemSize: number
-	private _buffer: WebGPUBuffer | null = null
+	private _buffer: Buffer | null = null
 	private _shaderLocation?: number
 	private _stepMode: GPUVertexStepMode = 'vertex'
 	private _needsUpdate = true

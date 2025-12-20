@@ -1,10 +1,10 @@
 import type Renderer from '../Renderer'
 
 /**
- * WebGPU 纹理管理器
- * 负责创建和管理各种类型的纹理
+ * WebGPU 纹理工厂
+ * 负责创建各种类型的纹理
  */
-export class WebGPUTextureManager {
+export class WebGPUTextureFactory {
 	private device: GPUDevice
 
 	constructor(device: GPUDevice) {
@@ -60,12 +60,14 @@ export class WebGPUTextureManager {
 	): GPURenderPassDescriptor {
 		return {
 			label,
-			colorAttachments: [{
-				view: texture.createView(),
-				clearValue: clearColor,
-				loadOp: 'clear',
-				storeOp: 'store',
-			}],
+			colorAttachments: [
+				{
+					view: texture.createView(),
+					clearValue: clearColor,
+					loadOp: 'clear',
+					storeOp: 'store',
+				},
+			],
 		}
 	}
 

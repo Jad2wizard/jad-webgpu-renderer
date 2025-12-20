@@ -107,6 +107,7 @@ export class Path extends Model {
 		}
 	}
 
+	// 将一维折线的顶点序列扩展为用于绘制粗线的三角形索引
 	private static extendLineToMesh(positions: Float32Array) {
 		const count = positions.length / 2
 		if (count < 2) return null

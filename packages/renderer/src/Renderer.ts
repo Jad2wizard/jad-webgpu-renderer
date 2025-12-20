@@ -1,6 +1,10 @@
 import Scene from './Scene'
 import { Camera } from './camera/camera'
 import { WebGPUBackend } from './backend'
+import { RenderGraph } from './pass/RenderGraph'
+import { ResourceProvider, ResourceHandle, Pass } from './pass/Pass'
+import { ClearPass } from './pass/ClearPass'
+import { ResolvePass } from './pass/ResolvePass'
 
 type IProps = {
 	canvas: HTMLCanvasElement
@@ -9,12 +13,14 @@ type IProps = {
 	deviceLimits?: GPUDeviceDescriptor['requiredLimits']
 }
 
-class Renderer {
+class Renderer implements ResourceProvider {
 	private ready = false
 	private backend: WebGPUBackend
+	private renderGraph: RenderGraph
 
 	private constructor(props: IProps) {
 		this.backend = new WebGPUBackend(props.canvas, props)
+		this.renderGraph = new RenderGraph(this)
 	}
 
 	static async create(props: IProps): Promise<Renderer> {
@@ -27,6 +33,23 @@ class Renderer {
 			instance.ready = false
 			throw 'WebGPU initialization failed' + e
 		}
+	}
+
+	getResource(handle: ResourceHandle): GPUTexture | GPUBuffer | undefined {
+		if (handle === 'output') {
+			if (this.antialias) {
+				return this.backend.getMultisampleTexture() || undefined
+			}
+			return this.backend.getContext().getCurrentTexture()
+		}
+		if (handle === 'screen') {
+			return this.backend.getContext().getCurrentTexture()
+		}
+		return this.renderGraph.getResource(handle)
+	}
+
+	addResource(handle: ResourceHandle, resource: GPUTexture | GPUBuffer): void {
+		this.renderGraph.addResource(handle, resource)
 	}
 
 	get width() {
@@ -76,7 +99,55 @@ class Renderer {
 		if (!this.ready) {
 			throw new Error('Renderer not initialized. Call create() first')
 		}
-		this.backend.render(scene, camera, this)
+
+		// 1. 更新全局变量
+		this.backend.updateGlobalUniforms(camera)
+
+		// 2. 准备渲染图
+		this.renderGraph.clear()
+
+		// 将全局资源注册到渲染图中
+		const outputResource = this.getResource('output')
+		if (outputResource) {
+			this.renderGraph.addResource('output', outputResource)
+		}
+		const screenResource = this.getResource('screen')
+		if (screenResource) {
+			this.renderGraph.addResource('screen', screenResource)
+		}
+
+		// 3. 收集 Pass 并管理清除操作
+		let outputLoadOp: GPULoadOp = 'clear'
+		let hasOutputPass = false
+
+		for (const model of scene.modelList) {
+			if (model.visible) {
+				const passes = model.getPasses(this, camera, outputLoadOp)
+				// 检查是否有 Pass 写入 output
+				const writesToOutput = passes.some((p) => p.outputs.has('output'))
+				if (writesToOutput) {
+					outputLoadOp = 'load' // 后续 Pass 应加载内容
+					hasOutputPass = true
+				}
+				for (let p of passes) this.renderGraph.addPass(p)
+			}
+		}
+
+		// 4. 如果没有绘制任何内容到 output，则使用 ClearPass 清屏
+		if (!hasOutputPass) {
+			this.renderGraph.addPass(new ClearPass('output', this.backend.getClearColor()))
+		}
+
+		// 5. 如果需要，执行 Resolve
+		if (this.antialias) {
+			// 添加 ResolvePass: output (MSAA) -> screen
+			this.renderGraph.addPass(new ResolvePass('output', 'screen'))
+		}
+
+		// 6. 执行
+		const encoder = this.device.createCommandEncoder()
+		this.renderGraph.execute(encoder)
+		this.device.queue.submit([encoder.finish()])
 	}
 }
 

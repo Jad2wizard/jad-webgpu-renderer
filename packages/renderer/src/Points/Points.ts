@@ -5,6 +5,10 @@ import Model from '../Model'
 import { Blending, Color, IPlayable } from '../types'
 import { deepMerge, packUint8ToUint32 } from '../utils'
 import RadiusStorage from './radiusStorage'
+import Renderer from '../Renderer'
+import { Camera } from '../camera/camera'
+import { Pass } from '../pass/Pass'
+import { PointsPass } from './PointsPass'
 
 const defaultStyle = {
 	radius: 8,
@@ -72,6 +76,18 @@ class Points extends Model implements IPlayable {
 
 	get total() {
 		return this._total
+	}
+
+	public getPasses(renderer: Renderer, camera: Camera, loadOp: GPULoadOp = 'load'): Pass[] {
+		return [
+			new PointsPass(
+				this,
+				camera,
+				'output',
+				loadOp,
+				loadOp === 'clear' ? renderer.webgpuBackend.getClearColor() : undefined
+			),
+		]
 	}
 
 	private getRadiusStorage() {

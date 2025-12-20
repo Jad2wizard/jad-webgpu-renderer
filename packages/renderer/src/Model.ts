@@ -3,8 +3,9 @@ import Renderer from './Renderer'
 import Geometry from './geometry/geometry'
 import Material from './material/material'
 import { IRenderable, TypedArray } from '@renderer/types'
-import { indexFormat } from './utils'
 import { WebGPUBackend } from '@renderer/backend'
+
+import { Pass } from './pass/Pass'
 
 type Options = {}
 
@@ -29,24 +30,16 @@ class Model implements IRenderable {
 		return this._id
 	}
 
-	set id(v: string) {
-		this._id = v
+	set id(s: string) {
+		this._id = s
 	}
 
 	get geometry() {
 		return this._geometry
 	}
 
-	set geometry(geo: Geometry) {
-		this._geometry = geo
-	}
-
 	get material() {
 		return this._material
-	}
-
-	set material(mat: Material) {
-		this._material = mat
 	}
 
 	get visible() {
@@ -70,8 +63,8 @@ class Model implements IRenderable {
 		this.textures[tn] = texture
 	}
 
-	public prevRender(renderer: Renderer, encoder: GPUCommandEncoder, camera: Camera): void {
-		// 预渲染逻辑，如果需要的话
+	public getPasses(renderer: Renderer, camera: Camera, loadOp?: GPULoadOp): Pass[] {
+		return []
 	}
 
 	public getAttribute(k: string) {
@@ -95,45 +88,15 @@ class Model implements IRenderable {
 	): void {
 		if (!this.visible) return
 		const backend = renderer.webgpuBackend as WebGPUBackend
-		const { material, geometry } = this
-		const pipeline = material.getPipeline(renderer, geometry.getVertexBufferLayout())
-		const { bindGroups, groupIndexList } = material.getBindGroups(
-			renderer,
-			camera,
-			backend,
-			textures || this.textures,
-			geometry.getVertexBufferLayout()
-		)
-
-		// 设置管线
-		if (pipeline) {
-			pass.setPipeline(pipeline)
-		}
-		for (let i = 0; i < groupIndexList.length; i++) {
-			pass.setBindGroup(groupIndexList[i], bindGroups[i])
-		}
-
-		// 更新并设置顶点缓冲区
-		const vertexBuffers = geometry.updateVertexBuffers(backend)
-		for (let i = 0; i < vertexBuffers.length; i++) {
-			const buffer = vertexBuffers[i]
-			pass.setVertexBuffer(i, buffer.GPUBuffer!)
-		}
-		const instanceCount = geometry.instanceCount > -1 ? geometry.instanceCount : undefined
-		const indexBuffer = geometry.getIndexBuffer(backend)
-		if (indexBuffer && geometry.index) {
-			pass.setIndexBuffer(indexBuffer.GPUBuffer!, indexFormat as GPUIndexFormat)
-			pass.drawIndexed(geometry.index.array.length, instanceCount)
-		} else {
-			pass.draw(geometry.vertexCount, instanceCount)
-		}
+		backend.drawModel(this, renderer, pass, camera, textures || this.textures)
 	}
 
 	public dispose() {
 		this._geometry.dispose()
 		this._material.dispose()
-		for (let tid in this.textures) {
-			this.textures[tid].destroy()
+		for (const key in this.textures) {
+			const texture = this.textures[key]
+			texture.destroy()
 		}
 		this.textures = {}
 	}

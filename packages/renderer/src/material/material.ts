@@ -5,7 +5,7 @@ import { TypedArray } from '../types'
 import { Camera } from '@renderer/camera/camera'
 import Uniform from './uniform'
 import Storage from './storage'
-import { WebGPUBuffer } from '@renderer/backend/WebGPUBuffer'
+import { Buffer } from '@renderer/backend/Buffer'
 import { WebGPUBackend } from '@renderer/backend'
 import { WebGPUPipelineOptions, PipelineRequest } from '@renderer/backend/WebGPUPipeline'
 
@@ -162,8 +162,8 @@ class Material {
 		storage.updateValue(value)
 	}
 
-	public getBuffers(backend: WebGPUBackend): WebGPUBuffer[] {
-		const res: WebGPUBuffer[] = []
+	public getBuffers(backend: WebGPUBackend): Buffer[] {
+		const res: Buffer[] = []
 		for (let un in this.uniforms) {
 			if (['projectionMatrix', 'viewMatrix', 'resolution'].includes(un)) continue
 			this.uniforms[un].updateBuffer(backend)

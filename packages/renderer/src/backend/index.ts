@@ -1,15 +1,17 @@
 import { Color } from '@renderer/types'
 import Scene from '../Scene'
+import type Model from '../Model'
 import { Camera } from '../camera/camera'
 import { WebGPUUtils } from './WebGPUUtils'
-import { normalizeColor } from '@renderer/utils'
+import { normalizeColor, indexFormat } from '@renderer/utils'
 import Renderer from '@renderer/Renderer'
-import { BufferManager, BufferType, CreateBufferOptions, WebGPUBuffer } from './WebGPUBuffer'
+import { Buffer, BufferType, BufferOptions } from './Buffer'
+import { BufferManager, CreateBufferOptions } from './WebGPUBuffer'
 import { WebGPUPipelineManager } from './WebGPUPipeline'
 import type { WebGPUPipelineOptions } from './WebGPUPipeline'
 import { WebGPUBindGroupManager } from './WebGPUBindGroup'
 import type { BindGroupEntryConfig, SystemUniformType } from './WebGPUBindGroup'
-import { WebGPUTextureManager } from './WebGPUTextureManager'
+import { WebGPUTextureFactory } from './WebGPUTextureFactory'
 import { WebGPURenderPassManager } from './WebGPURenderPassManager'
 
 // 导出 Pipeline 相关类和接口
@@ -21,7 +23,7 @@ export { WebGPUBindGroupManager }
 export type { BindGroupEntryConfig, SystemUniformType }
 
 // 导出 Texture 相关类
-export { WebGPUTextureManager }
+export { WebGPUTextureFactory }
 
 // 导出 RenderPass 相关类
 export { WebGPURenderPassManager }
@@ -40,7 +42,7 @@ export class WebGPUBackend {
 	private bufferManager: BufferManager // 添加 BufferManager 实例
 	private pipelineManager: WebGPUPipelineManager // 添加 PipelineManager 实例
 	private bindGroupManager: WebGPUBindGroupManager // 添加 BindGroupManager 实例
-	private textureManager: WebGPUTextureManager // 添加 TextureManager 实例
+	private textureFactory: WebGPUTextureFactory // 添加 TextureFactory 实例
 	private renderPassManager: WebGPURenderPassManager // 添加 RenderPassManager 实例
 
 	constructor(
@@ -108,8 +110,8 @@ export class WebGPUBackend {
 			// 初始化 BindGroupManager
 			this.bindGroupManager = new WebGPUBindGroupManager(device)
 
-			// 初始化 TextureManager
-			this.textureManager = new WebGPUTextureManager(device)
+			// 初始化 TextureFactory
+			this.textureFactory = new WebGPUTextureFactory(device)
 
 			// 初始化 RenderPassManager
 			this.renderPassManager = new WebGPURenderPassManager(device)
@@ -117,7 +119,7 @@ export class WebGPUBackend {
 			this.context.configure({
 				device,
 				format,
-				alphaMode: 'premultiplied',
+				alphaMode: 'premultiplied', // 确保透明度正确处理，输出到 canvas 上的颜色在 fragment shader中已经预乘过 alpha 值。浏览器合成器在混合 canvas 与网页背景时就不会再对 alpha 进行处理。
 			})
 			this.renderPassDescriptor = {
 				label: 'render pass',
@@ -156,40 +158,43 @@ export class WebGPUBackend {
 	 * @param camera
 	 * @param scene
 	 */
-	public render(scene: Scene, camera: Camera, renderer: Renderer) {
-		// const s = new Date().valueOf()
-		camera.updateMatrixBuffers(this.device)
-		const { device, renderPassDescriptor } = this
+	public drawModel(
+		model: Model,
+		renderer: Renderer,
+		pass: GPURenderPassEncoder,
+		camera: Camera,
+		textures: Record<string, GPUTexture>
+	): void {
+		const { material, geometry } = model
+		const vertexBufferLayouts = geometry.getVertexBufferLayout()
+		const pipeline = material.getPipeline(renderer, vertexBufferLayouts)
+		const { bindGroups, groupIndexList } = material.getBindGroups(
+			renderer,
+			camera,
+			this,
+			textures,
+			vertexBufferLayouts
+		)
 
-		this.updateRenderPassDescriptor()
-
-		const encoder = device.createCommandEncoder()
-
-		for (let model of scene.modelList) {
-			model.prevRender(renderer, encoder, camera)
+		if (pipeline) pass.setPipeline(pipeline)
+		for (let i = 0; i < groupIndexList.length; i++) {
+			pass.setBindGroup(groupIndexList[i], bindGroups[i])
 		}
 
-		const pass = encoder.beginRenderPass(renderPassDescriptor)
-		for (let model of scene.modelList) {
-			if (model.visible) model.render(renderer, pass, camera)
+		const vertexBuffers = geometry.updateVertexBuffers(this)
+		for (let i = 0; i < vertexBuffers.length; i++) {
+			const buffer = vertexBuffers[i]
+			pass.setVertexBuffer(i, buffer.GPUBuffer!)
 		}
 
-		pass.end()
-
-		const commandBuffer = encoder.finish()
-		this.device.queue.submit([commandBuffer])
-
-		// await this.device.queue.onSubmittedWorkDone()
-		// for (let model of scene.modelList){
-		// }
-		// for (let model of scene.modelList) {
-		// 	if (model instanceof Heatmap) {
-		// 		await delay(50)
-		// 		await model.setMaxMinHeatValue(this, 'max')
-		// 		await model.setMaxMinHeatValue(this, 'min')
-		// 	}
-		// }
-		// console.log(new Date().valueOf() - s)
+		const instanceCount = geometry.instanceCount > -1 ? geometry.instanceCount : undefined
+		const indexBuffer = geometry.getIndexBuffer(this)
+		if (indexBuffer && geometry.index) {
+			pass.setIndexBuffer(indexBuffer.GPUBuffer!, indexFormat as GPUIndexFormat)
+			pass.drawIndexed(geometry.index.array.length, instanceCount)
+		} else {
+			pass.draw(geometry.vertexCount, instanceCount)
+		}
 	}
 
 	resize() {
@@ -261,11 +266,24 @@ export class WebGPUBackend {
 	}
 
 	/**
-	 * 获取 TextureManager 实例
-	 * @returns TextureManager 实例
+	 * 获取 TextureFactory 实例
+	 * @returns TextureFactory 实例
 	 */
-	getTextureManager(): WebGPUTextureManager {
-		return this.textureManager
+	getTextureFactory(): WebGPUTextureFactory {
+		return this.textureFactory
+	}
+
+	getMultisampleTexture(): GPUTexture | null {
+		return this.multisampleTexture
+	}
+
+	getClearColor(): Color {
+		return this.clearColor
+	}
+
+	updateGlobalUniforms(camera: Camera) {
+		camera.updateMatrixBuffers(this.device)
+		this.updateResolution()
 	}
 
 	/**
@@ -287,7 +305,7 @@ export class WebGPUBackend {
 		size: number
 		initialData?: ArrayBuffer | ArrayBufferView
 		label: string
-	}): WebGPUBuffer {
+	}): Buffer {
 		if (!this.bufferManager) {
 			throw new Error('BufferManager not initialized. Call init() first.')
 		}
@@ -302,9 +320,9 @@ export class WebGPUBackend {
 	/**
 	 * 根据ID获取Buffer
 	 * @param id Buffer的ID
-	 * @returns WebGPUBuffer实例或undefined
+	 * @returns Buffer实例或undefined
 	 */
-	getBuffer(id: string): WebGPUBuffer | undefined {
+	getBuffer(id: string): Buffer | undefined {
 		if (!this.bufferManager) {
 			return undefined
 		}
@@ -314,9 +332,9 @@ export class WebGPUBackend {
 	/**
 	 * 根据资源名称获取Buffer列表
 	 * @param resourceName 资源名称
-	 * @returns WebGPUBuffer数组
+	 * @returns Buffer数组
 	 */
-	getBuffersByResourceName(resourceName: string): WebGPUBuffer[] {
+	getBuffersByResourceName(resourceName: string): Buffer[] {
 		if (!this.bufferManager) {
 			return []
 		}
@@ -326,9 +344,9 @@ export class WebGPUBackend {
 	/**
 	 * 根据类型获取Buffer列表
 	 * @param type Buffer类型
-	 * @returns WebGPUBuffer数组
+	 * @returns Buffer数组
 	 */
-	getBuffersByType(type: BufferType): WebGPUBuffer[] {
+	getBuffersByType(type: BufferType): Buffer[] {
 		if (!this.bufferManager) {
 			return []
 		}
@@ -339,7 +357,7 @@ export class WebGPUBackend {
 	 * 获取所有Buffer
 	 * @returns Buffer映射表
 	 */
-	getAllBuffers(): Map<string, WebGPUBuffer> {
+	getAllBuffers(): Map<string, Buffer> {
 		if (!this.bufferManager) {
 			return new Map()
 		}
@@ -352,11 +370,7 @@ export class WebGPUBackend {
 	 * @param data 新数据
 	 * @param offset 偏移量，默认为0
 	 */
-	updateBuffer(
-		buffer: WebGPUBuffer,
-		data: ArrayBuffer | ArrayBufferView,
-		offset: number = 0
-	): void {
+	updateBuffer(buffer: Buffer, data: ArrayBuffer | ArrayBufferView, offset: number = 0): void {
 		if (!this.bufferManager) {
 			throw new Error('BufferManager not initialized. Call init() first.')
 		}
@@ -368,7 +382,7 @@ export class WebGPUBackend {
 	 * @param buffer 要销毁的Buffer
 	 * @returns 是否成功销毁
 	 */
-	destroyBuffer(buffer: WebGPUBuffer): boolean {
+	destroyBuffer(buffer: Buffer): boolean {
 		if (!this.bufferManager) {
 			return false
 		}
@@ -402,7 +416,7 @@ export class WebGPUBackend {
 	 * @param buffer 要查询的Buffer
 	 * @returns 调试信息对象
 	 */
-	getBufferDebugInfo(buffer: WebGPUBuffer): any {
+	getBufferDebugInfo(buffer: Buffer): any {
 		if (!this.bufferManager) {
 			return null
 		}

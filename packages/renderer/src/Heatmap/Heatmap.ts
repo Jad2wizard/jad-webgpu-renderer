@@ -12,6 +12,10 @@ import Renderer from '../Renderer'
 import { Camera } from '../camera/camera'
 import Attribute from '../geometry/attribute'
 import { deepMerge, genId } from '../utils'
+import { RenderGraph } from '../pass/RenderGraph'
+import { HeatPointsPass, MaxHeatValuePass } from './HeatmapPasses'
+import { HeatmapRenderPass } from './HeatmapRenderPass'
+import { Pass } from '../pass/Pass'
 
 // Constants
 const HEATMAP_VERTEX_COUNT = 6
@@ -86,7 +90,7 @@ class Heatmap extends Model implements IPlayable {
 		super(props.id, geometry, mat)
 
 		this.validateProps(props)
-		
+
 		this._style = style
 		this._total = props.total || points.length / 2
 		this._cachedColorOffsets = null
@@ -135,9 +139,9 @@ class Heatmap extends Model implements IPlayable {
 	 */
 	private createHeatValueTexture(renderer: Renderer) {
 		const { width, height } = renderer
-		const textureManager = renderer.webgpuBackend.getTextureManager()
+		const textureFactory = renderer.webgpuBackend.getTextureFactory()
 
-		const heatValueTexture = textureManager.createHeatValueTexture(width, height)
+		const heatValueTexture = textureFactory.createHeatValueTexture(width, height)
 		this.updateTexture('heatValTex', heatValueTexture)
 	}
 
@@ -147,9 +151,9 @@ class Heatmap extends Model implements IPlayable {
 	 * @param renderer
 	 */
 	private createMaxHeatValueTexture(renderer: Renderer) {
-		const textureManager = renderer.webgpuBackend.getTextureManager()
+		const textureFactory = renderer.webgpuBackend.getTextureFactory()
 
-		const maxHeatValueTexture = textureManager.createMaxHeatValueTexture()
+		const maxHeatValueTexture = textureFactory.createMaxHeatValueTexture()
 		this.updateTexture('maxValTex', maxHeatValueTexture)
 	}
 
@@ -210,8 +214,6 @@ class Heatmap extends Model implements IPlayable {
 		this.maxHeatValueModel = new Model(this.id + '-max-heat-value-model', geo, mat)
 	}
 
-
-
 	/**
 	 * Checks if resolution has changed
 	 */
@@ -266,41 +268,52 @@ class Heatmap extends Model implements IPlayable {
 		this.reallocate()
 	}
 
-	public prevRender(renderer: Renderer, encoder: GPUCommandEncoder, camera: Camera) {
+	public getPasses(renderer: Renderer, camera: Camera, loadOp: GPULoadOp = 'load'): Pass[] {
 		this.checkCreateHeatValueTexture(renderer)
 		if (!this.textures['maxValTex']) this.createMaxHeatValueTexture(renderer)
 		if (!this.heatPointsModel) this.createHeatPointsModel(renderer)
 		if (!this.maxHeatValueModel) this.createMaxHeatValueModel(renderer)
-		
-		const renderPassManager = renderer.webgpuBackend.getRenderPassManager()
-		const heatValTex = this.textures['heatValTex']
-		const maxHeatValTex = this.textures['maxValTex']
-		
-		// 执行热力点渲染通道
+
+		const passes: Pass[] = []
+
+		// Add passes
 		if (this.heatPointsModel) {
-			renderPassManager.executeHeatPointsRenderPass(
-				encoder,
-				this.heatPointsModel,
-				heatValTex,
-				renderer,
-				camera
-			)
+			const heatPass = new HeatPointsPass(this.heatPointsModel, camera, 'heatValTex')
+			const heatValTex = this.textures['heatValTex']
+			if (heatValTex) {
+				renderer.addResource('heatValTex', heatValTex)
+			}
+			passes.push(heatPass)
 		}
-		
-		// 执行最大热力值渲染通道
+
 		if (this.maxHeatValueModel) {
-			// this.textures 中包含了 heatValTex 纹理，在 material.getBindGroups 中会根据 webgpu-utils 从 shader 代码中
-			// 获取到的纹理信息自动从 model.textures 中获取到相关纹理的作为 resource 添加到 bindGroup中，不需要显示绑定
-			// 但需要注意的是在同一个Model 中纹理名不要重复
-			renderPassManager.executeMaxHeatValueRenderPass(
-				encoder,
+			const maxPass = new MaxHeatValuePass(
 				this.maxHeatValueModel,
-				maxHeatValTex,
-				renderer,
 				camera,
-				this.textures
+				'heatValTex',
+				'maxValTex'
 			)
+			const maxHeatValTex = this.textures['maxValTex']
+			if (maxHeatValTex) {
+				renderer.addResource('maxValTex', maxHeatValTex)
+			}
+			passes.push(maxPass)
 		}
+
+		// Add final render pass
+		const renderPass = new HeatmapRenderPass(
+			this,
+			camera,
+			'output',
+			loadOp,
+			loadOp === 'clear' ? renderer.webgpuBackend.getClearColor() : undefined
+		)
+		// Note: 'output' resource should be managed by the renderer or global render graph
+		// But here we might not need to explicitly register 'output' if it's the screen
+		// For now, let's assume 'output' is handled by the backend or we map it to screen
+		passes.push(renderPass)
+
+		return passes
 	}
 
 	public updateCurrentTime(time: number): void {
@@ -364,18 +377,18 @@ class Heatmap extends Model implements IPlayable {
 
 	public dispose() {
 		super.dispose()
-		
+
 		// Dispose models
 		if (this.maxHeatValueModel) this.maxHeatValueModel.dispose()
 		if (this.heatPointsModel) this.heatPointsModel.dispose()
-		
+
 		// Clear references
 		this.heatPointsModel = undefined
 		this.maxHeatValueModel = undefined
-		
+
 		// Clear cached data
 		this._cachedColorOffsets = null
-		
+
 		// Reset resolution tracking
 		this.lastResolution = { width: 0, height: 0 }
 	}

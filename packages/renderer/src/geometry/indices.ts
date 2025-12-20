@@ -1,11 +1,11 @@
 import { TypedArray } from '@renderer/types'
-import { WebGPUBuffer, BufferType } from '@renderer/backend/WebGPUBuffer'
+import { Buffer, BufferType } from '@renderer/backend/Buffer'
 import { WebGPUBackend } from '@renderer/backend'
 
 class Index {
 	private _name: string
 	private _array: TypedArray
-	private _buffer: WebGPUBuffer | null = null
+	private _buffer: Buffer | null = null
 	private _needsUpdate = true
 
 	constructor(name: string, data: TypedArray) {

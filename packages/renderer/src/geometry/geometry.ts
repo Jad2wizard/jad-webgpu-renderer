@@ -1,7 +1,7 @@
 import Attribute from './attribute'
 import Index from './indices'
 import { Group } from '@renderer/types'
-import { WebGPUBuffer } from '@renderer/backend/WebGPUBuffer'
+import { Buffer } from '@renderer/backend/Buffer'
 import { WebGPUBackend } from '@renderer/backend'
 
 class Geometry {
@@ -92,7 +92,7 @@ class Geometry {
 		return this.index?.array || null
 	}
 
-	public getIndexBuffer(backend: WebGPUBackend): WebGPUBuffer | null {
+	public getIndexBuffer(backend: WebGPUBackend): Buffer | null {
 		if (!this.index) return null
 		this.index.updateBuffer(backend)
 		return this.index.buffer
@@ -122,8 +122,8 @@ class Geometry {
 		return Object.values(this.attributes)
 	}
 
-	public getBuffers(backend: WebGPUBackend): WebGPUBuffer[] {
-		const res: WebGPUBuffer[] = []
+	public getBuffers(backend: WebGPUBackend): Buffer[] {
+		const res: Buffer[] = []
 		// 更新所有 attribute buffers
 		for (let an in this.attributes) {
 			this.attributes[an].updateBuffer(backend)
@@ -141,8 +141,8 @@ class Geometry {
 		return res
 	}
 
-	public updateVertexBuffers(backend: WebGPUBackend): WebGPUBuffer[] {
-		const buffers: WebGPUBuffer[] = []
+	public updateVertexBuffers(backend: WebGPUBackend): Buffer[] {
+		const buffers: Buffer[] = []
 		for (let an in this.attributes) {
 			const attribute = this.attributes[an]
 			attribute.updateBuffer(backend)

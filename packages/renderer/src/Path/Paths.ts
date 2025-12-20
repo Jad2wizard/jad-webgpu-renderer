@@ -5,6 +5,8 @@ import { Camera } from '../camera/camera'
 import { binarySearch, deepMerge, genId } from '../utils'
 import { Path, Style, defaultStyle, IProps as PathProps } from './Path'
 import { HeadPoint } from './HeadPoint'
+import { Pass } from '../pass/Pass'
+import { PathsPass } from './PathsPass'
 
 export class Paths implements IRenderable {
 	private _id = 'paths_' + genId()
@@ -148,7 +150,17 @@ export class Paths implements IRenderable {
 		}
 	}
 
-	prevRender(renderer: Renderer, encoder: GPUCommandEncoder, camera: Camera) {}
+	public getPasses(renderer: Renderer, camera: Camera, loadOp: GPULoadOp = 'load'): Pass[] {
+		return [
+			new PathsPass(
+				this,
+				camera,
+				'output',
+				loadOp,
+				loadOp === 'clear' ? renderer.webgpuBackend.getClearColor() : undefined
+			),
+		]
+	}
 
 	render(renderer: Renderer, pass: GPURenderPassEncoder, camera: Camera) {
 		for (let path of this.pathModelList) {

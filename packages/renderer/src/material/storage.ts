@@ -1,5 +1,5 @@
 import { TypedArray } from '@renderer/types'
-import { WebGPUBuffer, BufferType } from '@renderer/backend/WebGPUBuffer'
+import { Buffer, BufferType } from '@renderer/backend/Buffer'
 import { WebGPUBackend } from '@renderer/backend'
 import { VariableDefinition } from 'webgpu-utils'
 
@@ -8,7 +8,7 @@ export type IProps = {
 	name: string
 	def?: VariableDefinition
 	value?: TypedArray
-	buffer?: WebGPUBuffer
+	buffer?: Buffer
 	byteLength?: number
 }
 
@@ -20,7 +20,7 @@ class Storage {
 	protected _id: string
 	protected _name: string
 	protected _value: TypedArray
-	protected _buffer: WebGPUBuffer | null = null
+	protected _buffer: Buffer | null = null
 	protected _needsUpdate = true
 	protected _def?: VariableDefinition
 

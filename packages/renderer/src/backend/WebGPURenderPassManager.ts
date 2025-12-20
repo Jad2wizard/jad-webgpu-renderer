@@ -1,6 +1,7 @@
 import type { Camera } from '../camera/camera'
 import type Renderer from '../Renderer'
 import type Model from '../Model'
+import type { IRenderable } from '../types'
 
 /**
  * WebGPU 渲染通道管理器
@@ -30,12 +31,14 @@ export class WebGPURenderPassManager {
 	): void {
 		const heatRenderPassDesc: GPURenderPassDescriptor = {
 			label: 'heat renderPass',
-			colorAttachments: [{
-				view: heatValTexture.createView(),
-				clearValue: [0, 0, 0, 0],
-				loadOp: 'clear',
-				storeOp: 'store',
-			}],
+			colorAttachments: [
+				{
+					view: heatValTexture.createView(),
+					clearValue: [0, 0, 0, 0],
+					loadOp: 'clear',
+					storeOp: 'store',
+				},
+			],
 		}
 		const pass = encoder.beginRenderPass(heatRenderPassDesc)
 		heatPointsModel.render(renderer, pass, camera)
@@ -61,15 +64,107 @@ export class WebGPURenderPassManager {
 	): void {
 		const renderPassDesc: GPURenderPassDescriptor = {
 			label: 'max heat renderPass',
-			colorAttachments: [{
-				view: maxHeatValTexture.createView(),
-				clearValue: [0, 0, 0, 0],
-				loadOp: 'clear',
-				storeOp: 'store',
-			}],
+			colorAttachments: [
+				{
+					view: maxHeatValTexture.createView(),
+					clearValue: [0, 0, 0, 0],
+					loadOp: 'clear',
+					storeOp: 'store',
+				},
+			],
 		}
 		const pass = encoder.beginRenderPass(renderPassDesc)
 		maxHeatValueModel.render(renderer, pass, camera, textures)
+		pass.end()
+	}
+
+	/**
+	 * 执行 Points 渲染通道
+	 */
+	executePointsRenderPass(
+		encoder: GPUCommandEncoder,
+		points: IRenderable,
+		outputView: GPUTextureView,
+		renderer: Renderer,
+		camera: Camera,
+		loadOp: GPULoadOp = 'load',
+		clearValue: GPUColor = [0, 0, 0, 0],
+		resolveTarget?: GPUTextureView
+	): void {
+		const passDesc: GPURenderPassDescriptor = {
+			label: 'points renderPass',
+			colorAttachments: [
+				{
+					view: outputView,
+					resolveTarget: resolveTarget,
+					clearValue: clearValue,
+					loadOp: loadOp,
+					storeOp: 'store',
+				},
+			],
+		}
+		const pass = encoder.beginRenderPass(passDesc)
+		points.render(renderer, pass, camera)
+		pass.end()
+	}
+
+	/**
+	 * 执行 Paths 渲染通道
+	 */
+	executePathsRenderPass(
+		encoder: GPUCommandEncoder,
+		paths: IRenderable,
+		outputView: GPUTextureView,
+		renderer: Renderer,
+		camera: Camera,
+		loadOp: GPULoadOp = 'load',
+		clearValue: GPUColor = [0, 0, 0, 0],
+		resolveTarget?: GPUTextureView
+	): void {
+		const passDesc: GPURenderPassDescriptor = {
+			label: 'paths renderPass',
+			colorAttachments: [
+				{
+					view: outputView,
+					resolveTarget: resolveTarget,
+					clearValue: clearValue,
+					loadOp: loadOp,
+					storeOp: 'store',
+				},
+			],
+		}
+		const pass = encoder.beginRenderPass(passDesc)
+		paths.render(renderer, pass, camera)
+		pass.end()
+	}
+
+	/**
+	 * 执行 Heatmap 最终渲染通道
+	 */
+	executeHeatmapRenderPass(
+		encoder: GPUCommandEncoder,
+		heatmap: IRenderable,
+		outputView: GPUTextureView,
+		renderer: Renderer,
+		camera: Camera,
+		loadOp: GPULoadOp = 'load',
+		clearValue: GPUColor = [0, 0, 0, 0],
+		resolveTarget?: GPUTextureView
+	): void {
+		const passDesc: GPURenderPassDescriptor = {
+			label: 'heatmap renderPass',
+			colorAttachments: [
+				{
+					view: outputView,
+					resolveTarget: resolveTarget,
+					clearValue: clearValue,
+					loadOp: loadOp,
+					storeOp: 'store',
+				},
+			],
+		}
+		const pass = encoder.beginRenderPass(passDesc)
+		heatmap.render(renderer, pass, camera)
 		pass.end()
 	}
 
@@ -91,12 +186,14 @@ export class WebGPURenderPassManager {
 	): GPURenderPassDescriptor {
 		return {
 			label,
-			colorAttachments: [{
-				view: texture.createView(),
-				clearValue: clearColor,
-				loadOp,
-				storeOp,
-			}],
+			colorAttachments: [
+				{
+					view: texture.createView(),
+					clearValue: clearColor,
+					loadOp,
+					storeOp,
+				},
+			],
 		}
 	}
 

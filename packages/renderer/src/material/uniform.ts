@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 import { makeStructuredView, StructuredView, VariableDefinition } from 'webgpu-utils'
-import { WebGPUBuffer, BufferType } from '@renderer/backend/WebGPUBuffer'
+import { Buffer, BufferType } from '@renderer/backend/Buffer'
 import { WebGPUBackend } from '@renderer/backend'
 
 export type IProps = {
@@ -16,7 +16,7 @@ class Uniform {
 	protected def: VariableDefinition
 	protected view: StructuredView
 	protected _value: any
-	protected _buffer: WebGPUBuffer | null = null
+	protected _buffer: Buffer | null = null
 	protected _needsUpdate = true
 
 	constructor(props: IProps) {

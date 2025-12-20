@@ -1,5 +1,6 @@
 import Renderer from './Renderer'
 import { Camera } from './camera/camera'
+import { Pass } from './pass/Pass'
 
 export type TypedArray =
 	| Float32Array
@@ -18,7 +19,7 @@ export type Color = [number, number, number, number]
 export interface IBuffer {}
 
 export interface IRenderable {
-	prevRender(renderer: Renderer, encoder: GPUCommandEncoder, camera: Camera): void
+	getPasses(renderer: Renderer, camera: Camera, loadOp?: GPULoadOp): Pass[]
 
 	render(
 		renderer: Renderer,
