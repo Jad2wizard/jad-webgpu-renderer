@@ -39,7 +39,7 @@ async function initApp() {
 	const size = new Uint8Array(num)
 	const timestamps = new Float32Array(num)
 	for (let i = 0; i < num; ++i) {
-		pos[2 * i] = (800 / num) * i - 400
+		pos[2 * i] = (700 / num) * i - 350
 		pos[2 * i + 1] = Math.sin(((2 * Math.PI) / num) * i) * 100
 		// pos[2 * i] = (Math.random() * 2 - 1) * 400
 		// pos[2 * i + 1] = (Math.random() * 2 - 1) * 200

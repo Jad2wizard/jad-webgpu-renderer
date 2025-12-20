@@ -24,33 +24,83 @@ export const genShaderCode = (hasTime: boolean, hasTail: boolean) => `
         ${hasTime ? '@location(0) startTime: f32' : ''}
     };
 
-    fn getAngle(v: vec2f) -> f32 {
-        return (atan2(v.y, v.x) + 2 * PI) % (2 * PI);
+    fn toClip(pos: vec2f) -> vec4f {
+        //将模型空间坐标转换为裁剪空间坐标，即 vs 的输出坐标
+        return projectionMatrix * viewMatrix * vec4f(pos, 0.0, 1.0);
     }
 
     @vertex fn vs(vert: Vertex) -> VSOutput {
         var vsOut: VSOutput;
         let posLen = arrayLength(&positions);
+        
         let index = vert.vi % posLen;
-        let p = positions[index % posLen];
-        ${hasTime ? 'let time = startTimes[index % posLen];' : ''}
-        let clipPos = projectionMatrix * viewMatrix * vec4f(p, 0, 1);
-        let side = f32(vert.vi / posLen) * -2 + 1; //-1 or 1
+        let p_Model = positions[index];
+        let side = f32(vert.vi / posLen) * -2.0 + 1.0;
+        
+        // 将当前点和相邻点投影到 Clip Space
+        let p_Clip = toClip(p_Model);
+        
+        // 获取前一个和后一个点的索引，避免下溢和上溢
+        let prevIndex = max(index, 1u) - 1u;
+        let nextIndex = min(index + 1u, posLen - 1u);
 
-        let pp = positions[(index - 1) % posLen];
-        let np = positions[(index + 1) % posLen];
-        let vnp = select(vec2f(np.x - p.x, np.y - p.y), vec2f(p.x - pp.x, p.y - pp.y), index == posLen - 1);
-        let vpp = select(vec2f(pp.x - p.x, pp.y - p.y), vec2f(p.x - np.x, p.y - np.y), index == 0);
-        let anp = getAngle(vnp);
-        let app = getAngle(vpp);
-        let angle = (app - anp + 2 * PI) % (2 * PI);//连线 pp -> p -> np 的左侧夹角
-        let lineWidth =  style.lineWidth / abs(sin(angle / 2));
-        let s = sin(angle / 2 + anp);
-        let c = cos(angle / 2 + anp);
-        let v = side * vec2f(c, s) * lineWidth / resolution * clipPos.w;
+        let pPrev_Model = positions[prevIndex];
+        let pNext_Model = positions[nextIndex];
+        
+        //  将点坐标转换到屏幕空间，计算线宽以及方向，避免透视导致的线段宽度失真
+        let pPrev_Clip = toClip(pPrev_Model);
+        let pNext_Clip = toClip(pNext_Model);
 
-        vsOut.position = vec4f(clipPos.xy + v, clipPos.z, clipPos.w);
-        ${hasTime ? 'vsOut.startTime = time;' : ''}
+        let p_Screen = (p_Clip.xy / p_Clip.w) * resolution;
+        let pPrev_Screen = (pPrev_Clip.xy / pPrev_Clip.w) * resolution;
+        let pNext_Screen = (pNext_Clip.xy / pNext_Clip.w) * resolution;
+
+        // 计算屏幕空间的切线向量
+        var dirPrev_Screen = vec2f(0.0);
+        var dirNext_Screen = vec2f(0.0);
+
+        let dPrev = p_Screen - pPrev_Screen;
+        if (length(dPrev) > 0.001) {
+            dirPrev_Screen = normalize(dPrev);
+        }
+
+        let dNext = pNext_Screen - p_Screen;
+        if (length(dNext) > 0.001) {
+            dirNext_Screen = normalize(dNext);
+        }
+        
+        //  拐角 斜接线长度
+        var miterLen = 1.0;
+        
+        // 计算切线方向，等于相连的两个 线段的向量和
+        let tangent_Screen = normalize(dirPrev_Screen + dirNext_Screen);
+        // 计算斜接线方向，等于切线的垂线
+        var miter_Screen = vec2f(-tangent_Screen.y, tangent_Screen.x);
+        
+        // 拐角处前面的线段的法线方向
+        let n_Screen = vec2f(-dirPrev_Screen.y, dirPrev_Screen.x);
+        // 通过向量点乘得到拐角平分线与法线的夹角的余弦值，用于计算斜接线长度
+        let dotVal = dot(miter_Screen, n_Screen);
+        
+        let isStart = step(f32(index), 0.5); // 1.0 if index <= 0.5 (i.e. 0)
+        let isEnd = step(f32(posLen) - 1.5, f32(index)); // 1.0 if index >= len - 1
+        let isEndpoint = max(isStart, isEnd);
+        
+        if (isEndpoint < 0.5) {
+             if (abs(dotVal) > 0.1) { //对于过于垂直的情况，斜接线长度取1.0
+                miterLen = 1.0 / dotVal;
+            }
+            miterLen = min(miterLen, 5.0); //斜接线长度不能超过5倍线宽
+        } else {
+        }
+
+        //  计算线段两端端点的屏幕坐标和裁剪空间坐标
+        let offset_Screen = miter_Screen * side * style.lineWidth * 0.5 * miterLen;
+        let offset_Clip = (offset_Screen / resolution) * 2.0 * p_Clip.w;
+
+        vsOut.position = vec4f(p_Clip.xy + offset_Clip, p_Clip.z, p_Clip.w);
+
+        ${hasTime ? 'vsOut.startTime = startTimes[index];' : ''}
         return vsOut;
     }
 
@@ -71,10 +121,14 @@ export const genShaderCode = (hasTime: boolean, hasTail: boolean) => `
         ${
 			hasTail && hasTime
 				? `
-            if(time - vsOut.startTime > tailDuration){
+            let age = time - vsOut.startTime;
+            if(age > tailDuration){
                 discard;
             }
-            let tailOpacity = clamp((vsOut.startTime - time + tailDuration) / tailDuration, 0, 1);
+            let life = clamp(1.0 - age / tailDuration, 0.0, 1.0);
+            
+            // 使用 smoothstep 让衰减更自然：头部更实，尾部更虚
+            let tailOpacity = smoothstep(0.0, 1.0, life);
         `
 				: ''
 		}
