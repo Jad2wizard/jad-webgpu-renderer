@@ -7,10 +7,15 @@ import { Paths } from '../Path/Paths'
 import Heatmap from '../Heatmap/Heatmap'
 import { times } from 'lodash'
 // import * as moment from 'moment'
+import Stats from 'stats.js'
 
 async function initApp() {
 	//@ts-ignore
 	window.V = Vector2
+
+	const stats = new Stats()
+	stats.showPanel(0) // 0: fps, 1: ms, 2: mb, 3+: custom
+	document.body.appendChild(stats.dom)
 
 	const canvas = document.querySelector('#canvas') as HTMLCanvasElement
 	if (!canvas) {
@@ -197,6 +202,7 @@ async function initApp() {
 	let lastTimestamp = 0
 	let start = 0
 	const animate = (time: number) => {
+		stats.begin()
 		// console.log(time)
 		if (start === 0) {
 			lastTimestamp = time
@@ -214,6 +220,7 @@ async function initApp() {
 		paths.updateCurrentTime(ct)
 		heat.updateCurrentTime(((time - start) * (totalTime / 400 / 20)) % timestamps[num - 1])
 		renderer.render(scene, camera)
+		stats.end()
 		requestAnimationFrame(animate)
 	}
 	requestAnimationFrame(animate)

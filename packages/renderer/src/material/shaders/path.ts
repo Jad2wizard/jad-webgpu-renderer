@@ -86,13 +86,14 @@ export const genShaderCode = (hasTime: boolean, hasTail: boolean) => `
         let isEnd = step(f32(posLen) - 1.5, f32(index)); // 1.0 if index >= len - 1
         let isEndpoint = max(isStart, isEnd);
         
-        if (isEndpoint < 0.5) {
-             if (abs(dotVal) > 0.1) { //对于过于垂直的情况，斜接线长度取1.0
-                miterLen = 1.0 / dotVal;
-            }
-            miterLen = min(miterLen, 5.0); //斜接线长度不能超过5倍线宽
-        } else {
-        }
+        // 处理极小角度保护 (abs(dotVal) > 0.1)
+        let miterMiddle = select(1.0, 1.0 / dotVal, abs(dotVal) > 0.1);
+        
+        // 限制最大斜接长度
+        let miterClamped = min(miterMiddle, 5.0);
+
+        // 如果 isEndpoint > 0.5 (是端点)，取 1.0；否则取 miterClamped
+        miterLen = select(miterClamped, 1.0, isEndpoint > 0.5);
 
         //  计算线段两端端点的屏幕坐标和裁剪空间坐标
         let offset_Screen = miter_Screen * side * style.lineWidth * 0.5 * miterLen;

@@ -18,6 +18,7 @@ export interface BufferOptions {
 }
 
 export class Buffer {
+	private static _nextId = 0
 	private _id: string
 	private _resourceName: string
 	private _size: number
@@ -27,7 +28,7 @@ export class Buffer {
 	private _device: GPUDevice | null = null
 
 	constructor(options: BufferOptions) {
-		this._id = (options.label || 'unlabeled') + '-buffer'
+		this._id = `${options.label || 'unlabeled'}-buffer-${Buffer._nextId++}`
 		this._resourceName = options.resourceName
 		this._size = options.size
 		this._usage = options.usage

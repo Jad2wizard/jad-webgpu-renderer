@@ -27,9 +27,29 @@ export enum SystemUniformType {
  */
 export class WebGPUBindGroupManager {
 	private device: GPUDevice
+	private bindGroupCache = new Map<string, GPUBindGroup>()
+	private bufferIdMap = new WeakMap<GPUBuffer, number>()
+	private textureIdMap = new WeakMap<GPUTexture, number>()
+	private nextResourceId = 1
 
 	constructor(device: GPUDevice) {
 		this.device = device
+	}
+
+	private getResourceId(resource: GPUBuffer | GPUTexture): number {
+		let id =
+			resource instanceof GPUBuffer
+				? this.bufferIdMap.get(resource)
+				: this.textureIdMap.get(resource)
+		if (id === undefined) {
+			id = this.nextResourceId++
+			if (resource instanceof GPUBuffer) {
+				this.bufferIdMap.set(resource, id)
+			} else {
+				this.textureIdMap.set(resource, id)
+			}
+		}
+		return id
 	}
 
 	/**
@@ -91,8 +111,12 @@ export class WebGPUBindGroupManager {
 
 		// 遍历每个绑定组索引，为每个组创建对应的绑定组
 		for (let index of groupIndexList) {
-			const entries: BindGroupEntryConfig[] = []
-			const bindIndexList: number[] = []
+			// 用于暂存条目和生成 Cache Key 的信息
+			const pendingEntries: {
+				binding: number
+				resource: GPUBindingResource
+				cacheId: string
+			}[] = []
 
 			// 处理uniform变量
 			for (let un in uniforms) {
@@ -128,10 +152,11 @@ export class WebGPUBindGroupManager {
 				}
 
 				if (buffer) {
-					bindIndexList.push(uniform.binding)
-					entries.push({
+					const resId = this.getResourceId(buffer)
+					pendingEntries.push({
 						binding: uniform.binding,
 						resource: { buffer, offset: 0, size: uniform.size },
+						cacheId: `B:${resId}`,
 					})
 				}
 			}
@@ -145,10 +170,11 @@ export class WebGPUBindGroupManager {
 				if (storage.needsUpdate) storage.updateBuffer(backend)
 				const buffer = storage.buffer?.GPUBuffer
 				if (buffer) {
-					bindIndexList.push(storage.binding)
-					entries.push({
+					const resId = this.getResourceId(buffer)
+					pendingEntries.push({
 						binding: storage.binding,
 						resource: { buffer, offset: 0, size: storage.size },
+						cacheId: `B:${resId}`,
 					})
 				}
 			}
@@ -161,20 +187,41 @@ export class WebGPUBindGroupManager {
 				const texture = textures[tn]
 				// 跳过未提供的纹理
 				if (!texture) continue
-				// 创建纹理条目并添加到绑定条目
-				entries.push({ binding, resource: texture.createView() })
+
+				const resId = this.getResourceId(texture)
+				pendingEntries.push({
+					binding,
+					resource: texture.createView(),
+					cacheId: `T:${resId}`,
+				})
 			}
 
-			// 创建绑定组
-			const descriptor: GPUBindGroupDescriptor = {
-				label: label + `-BindGroup-${index}`,
-				layout: pipeline.getBindGroupLayout(index),
-				entries: entries.map((entry) => ({
-					binding: entry.binding,
-					resource: entry.resource,
-				})),
+			// 按 binding 排序以确保 Key 的唯一性
+			pendingEntries.sort((a, b) => a.binding - b.binding)
+
+			// 生成 Cache Key
+			// Key 格式: "Label|Index|Binding=Type:ID|Binding=Type:ID..."
+			const cacheKey =
+				`${label}|${index}|` +
+				pendingEntries.map((e) => `${e.binding}=${e.cacheId}`).join('|')
+
+			// 检查缓存
+			let bindGroup = this.bindGroupCache.get(cacheKey)
+			if (!bindGroup) {
+				// 创建绑定组
+				const descriptor: GPUBindGroupDescriptor = {
+					label: label + `-BindGroup-${index}`,
+					layout: pipeline.getBindGroupLayout(index),
+					entries: pendingEntries.map((entry) => ({
+						binding: entry.binding,
+						resource: entry.resource,
+					})),
+				}
+				console.log(`创建 bindgroup${index}`)
+				bindGroup = this.device.createBindGroup(descriptor)
+				this.bindGroupCache.set(cacheKey, bindGroup)
 			}
-			const bindGroup = this.device.createBindGroup(descriptor)
+
 			bindGroups.push(bindGroup)
 		}
 
