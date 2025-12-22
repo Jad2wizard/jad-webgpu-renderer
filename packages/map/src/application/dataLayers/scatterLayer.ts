@@ -1,7 +1,7 @@
 import * as _ from 'lodash'
 import { IDataLayer, BaseLayer, IBaseLayerProps, Data, LabelFields, StyleParams } from './layer'
 import { Points } from '@webgpu-gmap/renderer'
-import { Color } from '@map/types'
+import { Color, Blending } from '@map/types'
 import { delay, parsePositionsAndExtent } from '@map/utils'
 import GMap from '..'
 
@@ -18,6 +18,7 @@ type StyleType = {
 		color?: Color
 		radius?: number
 	}
+	blending?: Blending
 }
 
 const defaultStyle: DeepRequired<StyleType> = {
@@ -27,6 +28,7 @@ const defaultStyle: DeepRequired<StyleType> = {
 		color: [255 / 255, 27 / 255, 20 / 255, 1],
 		radius: 15,
 	},
+	blending: 'normalBlending',
 }
 
 export type IProps = {
@@ -118,7 +120,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 				style: {
 					color: this.style.color,
 					radius: this.style.radius,
-					blending: 'normalBlending',
+					blending: this.style.blending,
 				},
 			})
 			this.scene.addModel(this.points)
@@ -144,7 +146,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 			this.style = _.merge(this.style, style)
 		}
 		if (!this.points) return Promise.resolve(false)
-		this.points.setStyle(style, pointIndices)
+		this.points.setStyle(style as any, pointIndices)
 		return Promise.resolve(true)
 	}
 

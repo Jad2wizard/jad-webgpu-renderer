@@ -177,6 +177,7 @@ class GMap extends EventEmitter {
 	private animate = () => {
 		if (this.active) requestAnimationFrame(this.animate)
 		this.view.animate()
+		this._layerManager.updateCurrentTime()
 		// 渲染散点图层
 		this.renderer.render(this._layerManager.scene, this.view.camera)
 	}

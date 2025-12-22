@@ -2,18 +2,24 @@ import { IBaseLayerProps, IDataLayer } from './dataLayers/layer'
 import GMap from '.'
 import { Scene } from '@webgpu-gmap/renderer'
 import ScatterLayer, { IProps as ScatterLayerProps } from './dataLayers/scatterLayer'
+import PathLayer, { IProps as PathLayerProps } from './dataLayers/pathLayer'
+import HeatmapLayer, { IProps as HeatmapLayerProps } from './dataLayers/heatmapLayer'
 
 /** 支持的图层类型 */
-export type LayerType = 'scatter'
+export type LayerType = 'scatter' | 'path' | 'heatmap'
 
 /** 图层类型与对应类的映射 */
 export type LayerClass = {
 	scatter: ScatterLayer
+	path: PathLayer
+	heatmap: HeatmapLayer
 }
 
 /** 图层类型与对应属性的映射 */
 export type LayerProps = {
 	scatter: ScatterLayerProps
+	path: PathLayerProps
+	heatmap: HeatmapLayerProps
 }
 
 /** 图层类构造函数映射表，用于根据类型动态创建图层实例 */
@@ -21,6 +27,8 @@ const layerClassMap: {
 	[T in LayerType]: new (props: IBaseLayerProps & LayerProps[T]) => LayerClass[T]
 } = {
 	scatter: ScatterLayer,
+	path: PathLayer,
+	heatmap: HeatmapLayer,
 }
 
 class LayerManager {
