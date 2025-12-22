@@ -2,7 +2,7 @@ import * as _ from 'lodash'
 import { IDataLayer, BaseLayer, IBaseLayerProps, Data, LabelFields, StyleParams } from './layer'
 import { Points } from '@webgpu-gmap/renderer'
 import { Color } from '@map/types'
-import { delay } from '@map/utils'
+import { delay, parsePositionsAndExtent } from '@map/utils'
 import GMap from '..'
 
 type FieldsType = LabelFields & {
@@ -46,7 +46,8 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 	private getRadius: IProps['getRadius']
 	private total?: number
 	private inputData: Data
-	private map: GMap
+	private map?: GMap
+	private updateToken = 0
 
 	constructor(props: IBaseLayerProps & IProps) {
 		super(props)
@@ -57,8 +58,6 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		this.fields = props.fields
 		this.style = _.merge(this.style, props.style)
 		this.inputData = []
-		//@ts-ignore
-		window.s = this
 	}
 
 	setSelected(selected: boolean) {
@@ -78,14 +77,22 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		return Promise.resolve(true)
 	}
 
-	async updateData(data: Data) {
-		const total = this.total || data.length
-		this.inputData = data
+	async updateData(data: Data, _fields?: LabelFields, style?: StyleParams) {
+		const token = ++this.updateToken
+		if (style) {
+			this.updateStyle(style)
+		}
+
+		this.clearAll()
+		this.inputData = []
+
+		const total = Math.min(this.total ?? data.length, data.length)
 		let current = 0
 		while (current < total) {
-			await this.appendData(
-				data.slice(current, current + Math.min(total - current, this.step))
-			)
+			if (this.updateToken !== token) return false
+
+			const chunk = data.slice(current, current + Math.min(total - current, this.step))
+			await this.appendData(chunk)
 			current += this.step
 			await delay(50)
 		}
@@ -93,13 +100,17 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 	}
 
 	async appendData(data: Data) {
-		const { positions, startTimes, colors, radiuses } = this.parseData(data)
-		if (!positions) {
-			throw new Error('缺少经纬度数据')
-		}
+		if (data.length === 0) return true
+		if (!this.map) return false
+
+		const { positions, startTimes, colors, radiuses, extent } = this.parseData(data)
+
+		// 合并 extent
+		this.updateExtent(extent)
+
 		if (!this.points) {
 			this.points = new Points({
-				id: 'points-demo',
+				id: this.id,
 				position: positions,
 				startTime: startTimes,
 				color: colors,
@@ -120,6 +131,10 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 			})
 		}
 		this.inputData.push(...data)
+
+		// 触发自动聚焦检查
+		this.map.checkAutoFit()
+
 		return true
 	}
 
@@ -145,50 +160,58 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 			this.points.dispose()
 			this.points = undefined
 		}
+		this.extent = undefined
 	}
 
 	dispose() {
 		this.clearAll()
-		//@ts-ignore
 		this.map = undefined
 	}
 
 	private parseData(data: Data) {
 		const len = data.length
-		const positions = new Float32Array(len * 2)
 
+		// 1. 调用通用方法解析位置和 Extent
+		const { positions, extent } = parsePositionsAndExtent(
+			data,
+			this.fields.lon,
+			this.fields.lat,
+			(lon, lat) => this.map!.getView().lonlat2World(lon, lat)
+		)
+
+		// 2. 解析 ScatterLayer 特有的属性（startTime, radius, color）
 		const startTimes = !!this.fields.startTime ? new Float32Array(len) : undefined
 		const radiuses = this.getRadius ? new Uint8Array(len) : undefined
 		const colors = this.getColor ? new Uint8Array(len * 4) : undefined
+
 		if (!!this.fields.startTime) {
 			for (let i = 0; i < len; i++) {
 				const st = Number(data[i][this.fields.startTime]) / 1000
 				this.startTime = Math.min(this.startTime, st)
 			}
 		}
+
 		for (let i = 0; i < len; ++i) {
 			const row = data[i]
-			const lon = Number(row[this.fields.lon])
-			const lat = Number(row[this.fields.lat])
-			const { x, y } = this.map.getView().lonlat2World(lon, lat)
-			positions[i * 2 + 0] = x
-			positions[i * 2 + 1] = y
+
 			if (this.fields.startTime && startTimes) {
 				const st = Number(data[i][this.fields.startTime as number]) / 1000
 				startTimes[i] = st - this.startTime
 			}
 			if (this.getRadius && radiuses) {
-				radiuses[i] = this.getRadius(row)
+				const r = this.getRadius(row)
+				radiuses[i] = Math.max(0, Math.min(255, Math.round(r)))
 			}
 			if (colors && this.getColor) {
 				const color = this.getColor(row)
-				colors[i * 4 + 0] = color[0] * 255
-				colors[i * 4 + 1] = color[1] * 255
-				colors[i * 4 + 2] = color[2] * 255
-				colors[i * 4 + 3] = color[3] * 255
+				colors[i * 4 + 0] = Math.max(0, Math.min(255, Math.round(color[0] * 255)))
+				colors[i * 4 + 1] = Math.max(0, Math.min(255, Math.round(color[1] * 255)))
+				colors[i * 4 + 2] = Math.max(0, Math.min(255, Math.round(color[2] * 255)))
+				colors[i * 4 + 3] = Math.max(0, Math.min(255, Math.round(color[3] * 255)))
 			}
 		}
-		return { positions, startTimes, colors, radiuses }
+
+		return { positions, startTimes, colors, radiuses, extent }
 	}
 }
 

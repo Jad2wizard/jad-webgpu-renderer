@@ -11,6 +11,7 @@ export interface IDataLayer {
 	getSelected(): boolean
 	getVisible(): boolean
 	getLevel(): number
+	getExtent(): Extent | null
 	updateData(data: Data, fields: LabelFields, style?: StyleParams): Promise<boolean>
 	updateStyle(style: StyleParams): Promise<boolean>
 	setSelected(setSelected: boolean): Promise<boolean>
@@ -43,6 +44,19 @@ export class BaseLayer {
 		this.selected = false
 		this.visible = true
 		this.extent = undefined
+	}
+
+	protected updateExtent(extent: Extent) {
+		if (!this.extent) {
+			this.extent = extent
+		} else {
+			this.extent = {
+				w: Math.min(this.extent.w, extent.w),
+				e: Math.max(this.extent.e, extent.e),
+				s: Math.min(this.extent.s, extent.s),
+				n: Math.max(this.extent.n, extent.n),
+			}
+		}
 	}
 
 	getExtent() {

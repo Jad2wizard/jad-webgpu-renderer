@@ -12,6 +12,7 @@ type IProps = {
 	tileLayer: TileLayer
 	center?: { lon: number; lat: number }
 	extent?: Extent
+	autoFit?: boolean
 }
 
 const defaultExtent: Extent = { w: 73, s: 18, e: 135, n: 54 }
@@ -27,11 +28,14 @@ class GMap extends EventEmitter {
 	private extent: Extent
 	private active = true
 	private resizeObserver?: ResizeObserver
+	private autoFit = false
+	private autoFitTimer: any = null
 
 	constructor(props: IProps) {
 		super()
 		this.container = props.container
 		this.extent = props.extent || { ...defaultExtent }
+		this.autoFit = !!props.autoFit
 		this.interacts = new Interacts({ map: this })
 		this.renderer = new Renderer({ container: this.container, antialias: true })
 		this.tileMap = this.initTileMap({ ...props, extent: this.extent })
@@ -75,6 +79,43 @@ class GMap extends EventEmitter {
 
 	removeLayer(layerId: string) {
 		this._layerManager.removeLayer(layerId)
+	}
+
+	public checkAutoFit() {
+		if (!this.autoFit) return
+		if (this.autoFitTimer) {
+			clearTimeout(this.autoFitTimer)
+		}
+		this.autoFitTimer = setTimeout(() => {
+			this.fitView()
+			this.autoFitTimer = null
+		}, 100)
+	}
+
+	public fitView() {
+		const layers = this._layerManager.getAllLayers()
+		if (layers.length === 0) return
+
+		let combinedExtent: Extent | null = null
+
+		for (const layer of layers) {
+			if (!layer.getVisible()) continue
+			const extent = layer.getExtent()
+			if (!extent) continue
+
+			if (!combinedExtent) {
+				combinedExtent = { ...extent }
+			} else {
+				combinedExtent.w = Math.min(combinedExtent.w, extent.w)
+				combinedExtent.e = Math.max(combinedExtent.e, extent.e)
+				combinedExtent.s = Math.min(combinedExtent.s, extent.s)
+				combinedExtent.n = Math.max(combinedExtent.n, extent.n)
+			}
+		}
+
+		if (combinedExtent) {
+			this.view.fitBounds(combinedExtent)
+		}
 	}
 
 	private initTileMap(props: IProps) {

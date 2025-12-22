@@ -18,14 +18,45 @@ function createTileLayer(urlTemplate: string) {
 	})
 }
 
-// 生成随机散点数据
-function generateRandomScatterData() {
+// 生成正弦波形状的散点数据（模拟 renderer/src/demo/index.ts 的逻辑）
+// 为了适应地图经纬度，我们需要将坐标缩放到合理的经纬度范围
+// 假设中心点为 [116.40, 39.90] (北京)，范围大概在 10度左右
+function generateSineWaveScatterData(num: number = 1000) {
 	const data = []
-	for (let i = 0; i < 100; i++) {
-		// 经度范围：100-125，纬度范围：25-35
-		const lon = 100 + Math.random() * 25
-		const lat = 25 + Math.random() * 10
-		data.push([lon, lat, `点${i + 1}`])
+	const centerLon = 116.4
+	const centerLat = 39.9
+
+	// 原始 renderer demo 是：
+	// pos[2 * i] = (700 / num) * i - 350  => x 范围 [-350, 350]
+	// pos[2 * i + 1] = Math.sin(((2 * Math.PI) / num) * i) * 100 => y 范围 [-100, 100]
+
+	// 映射到地图经纬度：
+	// x: [-350, 350] -> lon: [centerLon - 5, centerLon + 5] (跨度10度)
+	// y: [-100, 100] -> lat: [centerLat - 1.5, centerLat + 1.5] (跨度3度)
+
+	for (let i = 0; i < num; ++i) {
+		const xRatio = i / num // 0 ~ 1
+		const x = (xRatio - 0.5) * 10 // -5 ~ 5
+
+		const sineVal = Math.sin(((2 * Math.PI) / num) * i)
+		const y = sineVal * 1.5 // -1.5 ~ 1.5
+
+		const lon = centerLon + x
+		const lat = centerLat + y
+
+		// 模拟颜色和大小数据
+		// renderer demo color: r=1, g=(num-i)/num, b=0, a=0.3
+		// renderer demo size: abs(sin(...)) * 10 + 10
+
+		const r = 1
+		const g = (num - i) / num
+		const b = 0
+		const a = 0.3
+
+		const radius = Math.abs(sineVal) * 10 + 10
+
+		// 数据结构: [lon, lat, r, g, b, a, radius, label]
+		data.push([lon, lat, r, g, b, a, radius, `点${i}`])
 	}
 	return data
 }
@@ -39,30 +70,45 @@ const Demo = () => {
 			gmapRef.current = new GMap({
 				container: containerRef.current,
 				tileLayer: createTileLayer(tile_url_template),
+				autoFit: true,
 			})
+
+			// 初始视角定位到北京附近
+			gmapRef.current.getView().setCenter([116.4, 39.9])
+			gmapRef.current.getView().setZoom(8)
 
 			// 添加散点图层
 			const scatterLayer = gmapRef.current.addLayer('scatter-points', 'scatter', {
 				fields: {
-					lon: 0, // 经度在数据数组的第0个位置
-					lat: 1, // 纬度在数据数组的第1个位置
+					lon: 0,
+					lat: 1,
 					labelFields: {
-						field: 2, // 标签在数据数组的第2个位置
-						title: ['点名称'], // 标签字段的标题
+						field: 7,
+						title: ['点名称'],
 					},
 				},
+				// 自定义颜色读取逻辑
+				getColor: (row) => {
+					// row[2]~row[5] 是 r, g, b, a
+					return [Number(row[2]), Number(row[3]), Number(row[4]), Number(row[5])]
+				},
+				// 自定义半径读取逻辑
+				getRadius: (row) => {
+					return Number(row[6])
+				},
 				style: {
-					color: [0.2, 0.6, 1.0, 0.8], // 蓝色散点
+					// 默认样式作为兜底，会被 getColor/getRadius 覆盖
+					color: [0.2, 0.6, 1.0, 0.8],
 					radius: 6,
 					highlight: {
-						color: [1.0, 0.3, 0.3, 1.0], // 红色高亮
+						color: [1.0, 0.3, 0.3, 1.0],
 						radius: 12,
 					},
 				},
 			})
 
 			// 更新散点数据
-			const scatterData = generateRandomScatterData()
+			const scatterData = generateSineWaveScatterData(100)
 			scatterLayer.updateData(scatterData)
 		}
 	}, [])

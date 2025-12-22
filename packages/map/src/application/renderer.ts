@@ -6,7 +6,7 @@ type IProps = {
 }
 
 class Renderer {
-	private _renderer: WebGPURenderer
+	private _renderer?: WebGPURenderer
 	private _canvas: HTMLCanvasElement
 	private _antialias: boolean
 
@@ -39,11 +39,15 @@ class Renderer {
 	}
 
 	public render(scene: Scene, camera: Camera) {
-		this._renderer.render(scene, camera)
+		if (this._renderer) {
+			this._renderer.render(scene, camera)
+		}
 	}
 
 	public resize() {
-		this._renderer.resize()
+		if (this._renderer) {
+			this._renderer.resize()
+		}
 	}
 
 	public dispose(parentElement: HTMLElement) {

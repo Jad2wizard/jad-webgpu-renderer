@@ -67,6 +67,21 @@ class View {
 		this.camera.updateProjectionMatrix()
 	}
 
+	public setCenter(center: [number, number]) {
+		const world = this.lonlat2World(center[0], center[1])
+		this.camera.position.x = world.x
+		this.camera.position.y = world.y
+		this.controls.target.set(world.x, world.y, 0)
+		this.controls.update()
+	}
+
+	public setZoom(zoom: number) {
+		const fov = this.calcFov(this.height)
+		const height = calcCameraHeightFromZoom(zoom, this.height, fov)
+		this.camera.position.z = height
+		this.controls.update()
+	}
+
 	public resize(width: number, height: number) {
 		this.width = width
 		this.height = height
@@ -77,6 +92,40 @@ class View {
 		this._camera.fov = this.calcFov(this.height)
 		this._camera.updateProjectionMatrix()
 		this.onViewChange()
+	}
+
+	public fitBounds(extent: Extent) {
+		const { w, s, e, n } = extent
+		// 计算中心点
+		const centerLon = (w + e) / 2
+		const centerLat = (s + n) / 2
+
+		// 转换为世界坐标计算宽高
+		// 注意：我们需要使用绝对世界坐标，而不是相对于 offset 的坐标
+		// lonlat2World 返回的是相对于 offset 的，但在计算差值时 offset 会被抵消，所以没关系
+		const min = this.lonlat2World(w, s)
+		const max = this.lonlat2World(e, n)
+
+		const widthWorld = Math.abs(max.x - min.x)
+		const heightWorld = Math.abs(max.y - min.y)
+
+		// 加上一点 padding (例如 10%)
+		const padding = 1.1
+
+		// 计算所需的 zoom
+		// 屏幕像素 * resolution = 世界距离
+		// resolution = 世界距离 / 屏幕像素
+		const resX = (widthWorld * padding) / this.width
+		const resY = (heightWorld * padding) / this.height
+
+		const resolution = Math.max(resX, resY)
+
+		// zoom = log2(INITIAL_RESOLUTION / resolution)
+		const zoom = Math.log2(INITIAL_RESOLUTION / resolution)
+
+		// 设置视图
+		this.setCenter([centerLon, centerLat])
+		this.setZoom(zoom)
 	}
 
 	public lonlat2World(lon: number, lat: number) {
