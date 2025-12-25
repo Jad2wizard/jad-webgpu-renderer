@@ -42,7 +42,7 @@ export type IProps = {
 class ScatterLayer extends BaseLayer implements IDataLayer {
 	private points?: Points
 	private fields: FieldsType
-	private step = 100000
+	private step = 1000000
 	private style: DeepRequired<StyleType> = { ...defaultStyle }
 	private getColor: IProps['getColor']
 	private getRadius: IProps['getRadius']
@@ -107,7 +107,6 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 
 		const { positions, startTimes, colors, radiuses, extent } = this.parseData(data)
 
-		// 合并 extent
 		this.updateExtent(extent)
 
 		if (!this.points) {
@@ -132,9 +131,8 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 				radius: radiuses,
 			})
 		}
-		this.inputData.push(...data)
+		for (let item of data) this.inputData.push(item)
 
-		// 触发自动聚焦检查
 		this.map.checkAutoFit()
 
 		return true
@@ -171,17 +169,21 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 	}
 
 	private parseData(data: Data) {
+		const start = performance.now()
 		const len = data.length
 
-		// 1. 调用通用方法解析位置和 Extent
 		const { positions, extent } = parsePositionsAndExtent(
 			data,
 			this.fields.lon,
 			this.fields.lat,
-			(lon, lat) => this.map!.getView().lonlat2World(lon, lat)
+			(lon, lat) => this.map!.view.lonlat2WorldFast(lon, lat)
 		)
 
-		// 2. 解析 ScatterLayer 特有的属性（startTime, radius, color）
+		const end = performance.now()
+		console.log(
+			`[ScatterLayer] Position transformation for ${len} points took ${end - start}ms`
+		)
+
 		const startTimes = !!this.fields.startTime ? new Float32Array(len) : undefined
 		const radiuses = this.getRadius ? new Uint8Array(len) : undefined
 		const colors = this.getColor ? new Uint8Array(len * 4) : undefined

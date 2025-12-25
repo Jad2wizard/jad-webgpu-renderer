@@ -2,7 +2,7 @@ import * as _ from 'lodash'
 import { IDataLayer, BaseLayer, IBaseLayerProps, Data, LabelFields, StyleParams } from './layer'
 import { Paths } from '@webgpu-gmap/renderer'
 import { Color, Blending } from '@map/types'
-import { delay } from '@map/utils'
+import { delay, parsePositionsAndExtent } from '@map/utils'
 import GMap from '..'
 
 type FieldsType = LabelFields & {
@@ -111,7 +111,6 @@ class PathLayer extends BaseLayer implements IDataLayer {
 
 		const { pathPropsList, extent } = this.parseData(data)
 
-		// 合并 extent
 		this.updateExtent(extent)
 
 		if (!this.paths) {
@@ -158,7 +157,6 @@ class PathLayer extends BaseLayer implements IDataLayer {
 	}
 
 	private parseData(data: Data) {
-		// Group by pathId
 		const pathsMap = new Map<string | number, Data>()
 		const pathIdIdx = this.fields.pathId
 
@@ -179,24 +177,23 @@ class PathLayer extends BaseLayer implements IDataLayer {
 		for (const [pathId, rows] of pathsMap) {
 			const len = rows.length
 
-			const positions = new Float32Array(len * 2)
+			const { positions, extent } = parsePositionsAndExtent(
+				rows,
+				this.fields.lon,
+				this.fields.lat,
+				(lon, lat) => this.map!.view.lonlat2WorldFast(lon, lat)
+			)
+
+			minLon = Math.min(minLon, extent.w)
+			maxLon = Math.max(maxLon, extent.e)
+			minLat = Math.min(minLat, extent.s)
+			maxLat = Math.max(maxLat, extent.n)
+
 			const startTimes = !!this.fields.startTime ? new Float32Array(len) : undefined
 
-			for (let i = 0; i < len; i++) {
-				const row = rows[i]
-				const lon = Number(row[this.fields.lon])
-				const lat = Number(row[this.fields.lat])
-
-				minLon = Math.min(minLon, lon)
-				maxLon = Math.max(maxLon, lon)
-				minLat = Math.min(minLat, lat)
-				maxLat = Math.max(maxLat, lat)
-
-				const [x, y] = this.map!.getView().lonlat2World(lon, lat)
-				positions[2 * i] = x
-				positions[2 * i + 1] = y
-
-				if (this.fields.startTime && startTimes) {
+			if (this.fields.startTime && startTimes) {
+				for (let i = 0; i < len; i++) {
+					const row = rows[i]
 					const st = Number(row[this.fields.startTime]) / 1000
 					this.startTime = Math.min(this.startTime, st)
 				}

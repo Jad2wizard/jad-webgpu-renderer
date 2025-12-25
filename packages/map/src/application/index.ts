@@ -18,13 +18,13 @@ type IProps = {
 const defaultExtent: Extent = { w: 73, s: 18, e: 135, n: 54 }
 
 class GMap extends EventEmitter {
-	private view: View
-	private tileMap: TileMap
-	private renderer: Renderer
-	private currentTime = 0
-	private interacts: Interacts
+	private _view: View
+	private _tileMap: TileMap
+	private _renderer: Renderer
+	private _currentTime = 0
+	private _interacts: Interacts
 	private _layerManager = new LayerManager(this)
-	private container: HTMLDivElement
+	private _container: HTMLDivElement
 	private extent: Extent
 	private active = true
 	private resizeObserver?: ResizeObserver
@@ -33,14 +33,14 @@ class GMap extends EventEmitter {
 
 	constructor(props: IProps) {
 		super()
-		this.container = props.container
+		this._container = props.container
+		this._interacts = new Interacts({ map: this })
+		this._renderer = new Renderer({ container: this._container, antialias: true })
+		this._tileMap = this.initTileMap({ ...props, extent: this.extent })
+		this._view = this.initView({ ...props, extent: this.extent }, this._renderer.canvas)
+
 		this.extent = props.extent || { ...defaultExtent }
 		this.autoFit = !!props.autoFit
-		this.interacts = new Interacts({ map: this })
-		this.renderer = new Renderer({ container: this.container, antialias: true })
-		this.tileMap = this.initTileMap({ ...props, extent: this.extent })
-		this.view = this.initView({ ...props, extent: this.extent }, this.renderer.canvas)
-
 		// 异步初始化渲染器
 		this.initRenderer().then(() => {
 			this.animate()
@@ -53,24 +53,36 @@ class GMap extends EventEmitter {
 		window.map = this
 	}
 
-	getView() {
-		return this.view
+	get view() {
+		return this._view
 	}
 
-	getRenderer() {
-		return this.renderer
+	get renderer() {
+		return this._renderer
 	}
 
-	getCurrentTime() {
-		return this.currentTime
+	get currentTime() {
+		return this._currentTime
 	}
 
-	setCurentTime(time: number) {
-		this.currentTime = time
+	set currentTime(time: number) {
+		this._currentTime = time
 	}
 
-	getContainer() {
-		return this.container
+	get container() {
+		return this._container
+	}
+
+	get tileMap() {
+		return this._tileMap
+	}
+
+	get layerManager() {
+		return this._layerManager
+	}
+
+	get interacts() {
+		return this._interacts
 	}
 
 	addLayer<T extends LayerType>(layerId: string, layerType: T, layerProps: LayerProps[T]) {
@@ -132,9 +144,9 @@ class GMap extends EventEmitter {
 
 	private initView(props: IProps, canvas: HTMLCanvasElement) {
 		const viewInstance = new View({
-			tileMap: this.tileMap,
-			width: this.container.offsetWidth,
-			height: this.container.offsetHeight,
+			tileMap: this._tileMap,
+			width: this._container.offsetWidth,
+			height: this._container.offsetHeight,
 			extent: this.extent,
 			center: props.center,
 			controlCanvas: canvas,
@@ -164,8 +176,8 @@ class GMap extends EventEmitter {
 					this.view.resize(canvas.width, canvas.height)
 				}
 				// 更新地图瓦片容器尺寸
-				if (this.tileMap) {
-					this.tileMap.resize()
+				if (this._tileMap) {
+					this._tileMap.resize()
 				}
 			} catch (error) {
 				// 如果渲染器还没有完全初始化，忽略resize事件

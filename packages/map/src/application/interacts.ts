@@ -22,7 +22,7 @@ class Interacts {
 		this.map = props.map
 		this.mouseCoord = { left: 0, top: 0, x: 0, y: 0 }
 		this.mouseDownCoord = { left: 0, top: 0, x: 0, y: 0 }
-		const element = this.map.getContainer()
+		const element = this.map.container
 		element.addEventListener('mousedown', this.onMouseDown)
 		element.addEventListener('mousemove', this.onMouseMove)
 		element.addEventListener('mouseup', this.onMouseUp)
@@ -31,7 +31,7 @@ class Interacts {
 	private calcCoord(e: MouseEvent) {
 		const left = e.clientX
 		const top = e.clientY
-		const worldCood = this.map.getView().screen2World(left, top)
+		const worldCood = this.map.view.screen2World(left, top)
 		return { left, top, x: worldCood.x, y: worldCood.y }
 	}
 
@@ -85,7 +85,7 @@ class Interacts {
 	}
 
 	dispose() {
-		const element = this.map.getContainer()
+		const element = this.map.container
 		element.removeEventListener('mousedown', this.onMouseDown)
 		element.removeEventListener('mousemove', this.onMouseMove)
 		element.removeEventListener('mouseup', this.onMouseUp)

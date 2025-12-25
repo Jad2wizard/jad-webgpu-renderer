@@ -136,73 +136,73 @@ const Demo = () => {
 			})
 
 			// 初始视角定位到北京附近
-			gmapRef.current.getView().setCenter([116.4, 39.9])
-			gmapRef.current.getView().setZoom(10) // Zoom in a bit
+			gmapRef.current.view.setCenter([116.4, 39.9])
+			gmapRef.current.view.setZoom(10) // Zoom in a bit
 
-			const { heatmapData, pathsData, scatterData } = generateDemoData(1000)
+			const { heatmapData, pathsData, scatterData } = generateDemoData(1000000)
 
 			// 1. Heatmap Layer
-			const heatmapLayer = gmapRef.current.addLayer('heatmap-layer', 'heatmap', {
-				fields: {
-					lon: 0,
-					lat: 1,
-					startTime: 2,
-				},
-				style: {
-					radius: 30,
-					blur: 0.8,
-					colorList: [
-						[1, 0, 0, 0],
-						[0.9, 0.9, 0, 0],
-						[0.1, 0.8, 0.2, 0],
-						[0, 0.0, 1.0, 0],
-						[0, 0, 0, 0],
-					],
-					colorOffsets: [1, 0.85, 0.45, 0.25, 0],
-					blending: 'normalBlending',
-				},
-			})
-			heatmapLayer.updateData(heatmapData)
-			heatmapLayer.setLevel(1)
+			// const heatmapLayer = gmapRef.current.addLayer('heatmap-layer', 'heatmap', {
+			// 	fields: {
+			// 		lon: 0,
+			// 		lat: 1,
+			// 		startTime: 2,
+			// 	},
+			// 	style: {
+			// 		radius: 30,
+			// 		blur: 0.8,
+			// 		colorList: [
+			// 			[1, 0, 0, 0],
+			// 			[0.9, 0.9, 0, 0],
+			// 			[0.1, 0.8, 0.2, 0],
+			// 			[0, 0.0, 1.0, 0],
+			// 			[0, 0, 0, 0],
+			// 		],
+			// 		colorOffsets: [1, 0.85, 0.45, 0.25, 0],
+			// 		blending: 'normalBlending',
+			// 	},
+			// })
+			// heatmapLayer.updateData(heatmapData)
+			// heatmapLayer.setLevel(1)
 
 			// 2. Path Layer
-			const pathLayer = gmapRef.current.addLayer('path-layer', 'path', {
-				fields: {
-					pathId: 0,
-					lon: 1,
-					lat: 2,
-					startTime: 3,
-				},
-				style: {
-					color: [1, 0.3, 0.2, 0.9],
-					lineWidth: 10,
-					headPointColor: [1, 0.9, 0.3, 1],
-					headPointSize: 10,
-					headPointVisible: false,
-					blending: 'normalBlending',
-					drawLine: false,
-					trailDuration: 0,
-				},
-				getPathStyle: (pathId) => {
-					if (String(pathId) === '1') {
-						return {
-							// pathId 1 specific style
-							tailDuration: 3, // seconds
-						}
-					} else if (String(pathId) === '2') {
-						return {
-							// pathId 2 specific style
-							color: [1, 1, 0, 0.7],
-							headPointVisible: true,
-							headPointSize: 15,
-							drawLine: true,
-						}
-					}
-					return {}
-				},
-			})
-			pathLayer.updateData(pathsData)
-			pathLayer.setLevel(2)
+			// const pathLayer = gmapRef.current.addLayer('path-layer', 'path', {
+			// 	fields: {
+			// 		pathId: 0,
+			// 		lon: 1,
+			// 		lat: 2,
+			// 		startTime: 3,
+			// 	},
+			// 	style: {
+			// 		color: [1, 0.3, 0.2, 0.9],
+			// 		lineWidth: 10,
+			// 		headPointColor: [1, 0.9, 0.3, 1],
+			// 		headPointSize: 10,
+			// 		headPointVisible: false,
+			// 		blending: 'normalBlending',
+			// 		drawLine: false,
+			// 		trailDuration: 0,
+			// 	},
+			// 	getPathStyle: (pathId) => {
+			// 		if (String(pathId) === '1') {
+			// 			return {
+			// 				// pathId 1 specific style
+			// 				tailDuration: 3, // seconds
+			// 			}
+			// 		} else if (String(pathId) === '2') {
+			// 			return {
+			// 				// pathId 2 specific style
+			// 				color: [1, 1, 0, 0.7],
+			// 				headPointVisible: true,
+			// 				headPointSize: 15,
+			// 				drawLine: true,
+			// 			}
+			// 		}
+			// 		return {}
+			// 	},
+			// })
+			// pathLayer.updateData(pathsData)
+			// pathLayer.setLevel(2)
 
 			// 3. Scatter Layer
 			const scatterLayer = gmapRef.current.addLayer('scatter-points', 'scatter', {
@@ -239,7 +239,7 @@ const Demo = () => {
 				const loopTime = ((elapsed % cycleDuration) / cycleDuration) * 20000
 
 				if (gmapRef.current) {
-					gmapRef.current.setCurentTime(loopTime)
+					gmapRef.current.currentTime = loopTime
 				}
 				requestAnimationFrame(animate)
 			}

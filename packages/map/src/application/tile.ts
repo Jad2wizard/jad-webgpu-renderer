@@ -2,7 +2,6 @@ import OlMap from 'ol/Map'
 import View from 'ol/View'
 import { fromLonLat, transform } from 'ol/proj'
 import OLTileLayer from 'ol/layer/Tile'
-import { Extent } from '@map/types'
 import WMTS from 'ol/source/WMTS'
 import XYZ from 'ol/source/XYZ'
 import OSM from 'ol/source/OSM'
@@ -35,6 +34,7 @@ class TileMap {
 				zoom: defaultZoom,
 				minZoom: 1,
 				maxZoom: 20,
+				projection: 'EPSG:3857',
 			}),
 			interactions: [],
 			controls: [], // 禁用所有默认控件（包括缩放控件）
@@ -43,13 +43,13 @@ class TileMap {
 		window.from = fromLonLat
 	}
 
-	public getView() {
+	get view() {
 		return this.olMap.getView()
 	}
 
 	// 获取地图中心的经纬度坐标
 	public getCenter() {
-		const centerInMeter = this.getView().getCenter()
+		const centerInMeter = this.view.getCenter()
 		if (!centerInMeter) {
 			return null
 		}
@@ -59,16 +59,16 @@ class TileMap {
 
 	//获取单位米/像素的分辨率
 	public getResolution() {
-		return this.getView().getResolution()
+		return this.view.getResolution()
 	}
 
 	public updateView(params: { center?: { lon: number; lat: number }; zoom?: number }) {
 		if (params.center) {
 			const center = fromLonLat([params.center.lon, params.center.lat])
-			this.getView().setCenter(center)
+			this.view.setCenter(center)
 		}
 		if (params.zoom) {
-			this.getView().setZoom(params.zoom)
+			this.view.setZoom(params.zoom)
 		}
 	}
 

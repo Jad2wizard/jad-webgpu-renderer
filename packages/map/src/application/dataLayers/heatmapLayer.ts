@@ -157,15 +157,13 @@ class HeatmapLayer extends BaseLayer implements IDataLayer {
 	private parseData(data: Data) {
 		const len = data.length
 
-		// 1. 调用通用方法解析位置和 Extent
 		const { positions, extent } = parsePositionsAndExtent(
 			data,
 			this.fields.lon,
 			this.fields.lat,
-			(lon, lat) => this.map!.getView().lonlat2World(lon, lat)
+			(lon, lat) => this.map!.view.lonlat2WorldFast(lon, lat)
 		)
 
-		// 2. 解析 Heatmap 特有的属性（startTime）
 		const startTimes = !!this.fields.startTime ? new Float32Array(len) : undefined
 
 		if (!!this.fields.startTime) {

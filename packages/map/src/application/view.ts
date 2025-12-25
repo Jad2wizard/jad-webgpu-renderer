@@ -43,6 +43,9 @@ class View {
 	private plane = new Plane(new Vector3(0, 0, 1), 0)
 	private controls: OrbitControls
 
+	private R = 6378137
+	private MAX_LAT = 85.0511287798
+
 	constructor(props: IProps) {
 		this.width = props.width
 		this.height = props.height
@@ -96,34 +99,24 @@ class View {
 
 	public fitBounds(extent: Extent) {
 		const { w, s, e, n } = extent
-		// 计算中心点
 		const centerLon = (w + e) / 2
 		const centerLat = (s + n) / 2
 
-		// 转换为世界坐标计算宽高
-		// 注意：我们需要使用绝对世界坐标，而不是相对于 offset 的坐标
-		// lonlat2World 返回的是相对于 offset 的，但在计算差值时 offset 会被抵消，所以没关系
 		const min = this.lonlat2World(w, s)
 		const max = this.lonlat2World(e, n)
 
 		const widthWorld = Math.abs(max.x - min.x)
 		const heightWorld = Math.abs(max.y - min.y)
 
-		// 加上一点 padding (例如 10%)
 		const padding = 1.1
 
-		// 计算所需的 zoom
-		// 屏幕像素 * resolution = 世界距离
-		// resolution = 世界距离 / 屏幕像素
 		const resX = (widthWorld * padding) / this.width
 		const resY = (heightWorld * padding) / this.height
 
 		const resolution = Math.max(resX, resY)
 
-		// zoom = log2(INITIAL_RESOLUTION / resolution)
 		const zoom = Math.log2(INITIAL_RESOLUTION / resolution)
 
-		// 设置视图
 		this.setCenter([centerLon, centerLat])
 		this.setZoom(zoom)
 	}
@@ -131,6 +124,20 @@ class View {
 	public lonlat2World(lon: number, lat: number) {
 		const [x, y] = this.proj.forward([lon, lat])
 		return new Vector2(x - this.offset.x, y - this.offset.y)
+	}
+
+	public lonlat2WorldFast(lon: number, lat: number) {
+		const { x, y } = this.projectFast(lon, lat)
+		return { x: x - this.offset.x, y: y - this.offset.y }
+	}
+
+	private projectFast(lon: number, lat: number) {
+		const d = Math.PI / 180
+		const max = this.MAX_LAT
+		const latVal = Math.max(Math.min(max, lat), -max)
+		const x = this.R * lon * d
+		const y = this.R * Math.log(Math.tan(Math.PI / 4 + (latVal * d) / 2))
+		return { x, y }
 	}
 
 	public world2Lonlat(coord: Vector2): [number, number] {
@@ -169,8 +176,7 @@ class View {
 		const center = props.center ? [props.center.lon, props.center.lat] : [120, 30]
 		const centerWorld = this.lonlat2World(center[0], center[1])
 
-		// 根据 TileMap 的默认 zoom 级别计算相机高度
-		const defaultZoom = this.tileMap.getView().getZoom() || 7
+		const defaultZoom = this.tileMap.view.getZoom() || 7
 		const fov = this.calcFov(this.height)
 		const cameraHeight = calcCameraHeightFromZoom(defaultZoom, this.height, fov)
 
@@ -186,37 +192,27 @@ class View {
 	}
 
 	/**
-	 * 以1000像素高度下45度fov为基准，计算任意屏幕高度下的fov。以达到不同分辨率下相同的视觉比例
+	 * 以1000像素高度下45度fov为基准，计算任意屏幕高度下的fov。以达到不同屏幕高度下地图上物体相同的视觉比例
 	 * @param height 屏幕 像素高度
 	 * @returns 任意屏幕高度下的fov
 	 */
 	private calcFov(height: number) {
 		const tanAlpha: number = Math.tan((45 * Math.PI) / 360)
-		return (Math.atan2(height, 1000 / tanAlpha) * 360) / Math.PI
+		let res = (Math.atan2(height, 1000 / tanAlpha) * 360) / Math.PI
+		console.log(res)
+		// res = 50.74
+		return res
 	}
 
-	/**
-	 * 核心同步方法：当 Three.js 相机（Controls）发生变化时，同步更新 OpenLayers 地图视图
-	 * 优化：移除昂贵的射线检测 (Raycasting)，改为基于相机高度的纯数学计算 (O(1))
-	 */
 	private onViewChange = () => {
-		// 1. 性能优化：直接根据相机高度计算 Zoom
-		// 原理：Resolution = (VisibleWorldHeight) / ScreenHeight
-		// VisibleWorldHeight = 2 * CameraHeight * tan(fov/2)
 		const fovRad = (this.camera.fov * Math.PI) / 180
 		const resolution = (this.camera.position.z * Math.tan(fovRad / 2) * 2) / this.height
 
-		// 反推 Zoom 公式原理：
-		// 在 Web Mercator 投影中，Zoom 0 的分辨率为 R0
-		// 每一级 Zoom 的分辨率是上一级的一半：Rz = R0 / (2^z)
-		// 因此：2^z = R0 / Rz  =>  z = log2(R0 / Rz)
 		const zoom = Math.log2(INITIAL_RESOLUTION / resolution)
 
-		// 2. 根据 3D 相机的中心位置计算地图中心点
 		const { position } = this.camera
 		const center = this.world2Lonlat(new Vector2(position.x, position.y))
 
-		// 3. 执行同步
 		this.tileMap.updateView({ center: { lon: center[0], lat: center[1] }, zoom })
 	}
 

@@ -87,7 +87,7 @@ class LayerManager {
 	}
 
 	updateCurrentTime() {
-		const time = this.gmap.getCurrentTime()
+		const time = this.gmap.currentTime
 		for (let layerId in this._layers) {
 			const layer = this._layers[layerId]
 			layer.onTimeUpdate(time)
