@@ -7,6 +7,7 @@ export enum BufferType {
 	VERTEX = 'vertex',
 	INDEX = 'index',
 	READ_WRITE_STORAGE = 'readWriteStorage',
+	VERTEX_STORAGE = 'vertex_storage',
 }
 
 export interface BufferOptions {

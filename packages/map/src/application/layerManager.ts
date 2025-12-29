@@ -48,6 +48,10 @@ class LayerManager {
 		return this._gmap
 	}
 
+	get layers() {
+		return Object.values(this._layers).sort((a, b) => a.getLevel() - b.getLevel())
+	}
+
 	getLayer(lid: string) {
 		return this._layers[lid] || null
 	}
@@ -56,7 +60,7 @@ class LayerManager {
 		return Object.values(this._layers)
 	}
 
-	createLayer<T extends LayerType>(
+	addLayer<T extends LayerType>(
 		layerId: string,
 		layerType: T,
 		layerProps: LayerProps[T]

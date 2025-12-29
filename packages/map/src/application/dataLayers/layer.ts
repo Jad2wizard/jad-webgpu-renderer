@@ -20,6 +20,7 @@ export interface IDataLayer {
 	onTimeUpdate(time: number): void
 	clearAll(): void
 	dispose(): void
+	pick?(x: number, y: number): Promise<Data>
 }
 
 export type IBaseLayerProps = {

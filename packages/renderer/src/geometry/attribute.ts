@@ -7,6 +7,7 @@ type Options = {
 	shaderLocation?: number
 	stepMode?: GPUVertexStepMode
 	capacity?: number
+	usage?: BufferType
 }
 
 class Attribute {
@@ -16,6 +17,7 @@ class Attribute {
 	private _buffer: Buffer | null = null
 	private _shaderLocation?: number
 	private _stepMode: GPUVertexStepMode = 'vertex'
+	private _usage: BufferType = BufferType.VERTEX
 	private _needsUpdate = true
 
 	constructor(name: string, data: TypedArray, itemSize: number, options?: Options) {
@@ -24,6 +26,7 @@ class Attribute {
 		this._itemSize = itemSize
 		this._shaderLocation = options?.shaderLocation
 		if (options?.stepMode) this._stepMode = options.stepMode
+		if (options?.usage) this._usage = options.usage
 		// Buffer 将在 updateBuffer 时创建
 	}
 
@@ -83,7 +86,7 @@ class Attribute {
 				const resourceName = 'attrubite_' + this._name
 				this._buffer = backend.createBuffer({
 					label: resourceName,
-					type: BufferType.VERTEX,
+					type: this._usage,
 					resourceName,
 					size: this._array.byteLength,
 					initialData: this._array.buffer as ArrayBuffer,

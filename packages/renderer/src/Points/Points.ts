@@ -1,6 +1,8 @@
 import Geometry from '../geometry/geometry'
 import Attribute from '../geometry/attribute'
+import { Buffer, BufferType } from '../backend/Buffer'
 import PointMaterial from './pointMaterial'
+import { computeShader } from '../material/shaders/pointsCompute'
 import Model from '../Model'
 import { Blending, Color, IPlayable } from '../types'
 import { deepMerge, packUint8ToUint32 } from '../utils'
@@ -30,9 +32,18 @@ type IProps = {
 	}
 }
 
+import Storage from '../material/storage'
+import Uniform from '../material/uniform'
+import { makeShaderDataDefinitions } from 'webgpu-utils'
+
 class Points extends Model implements IPlayable {
 	private _playable = false
 	private _total: number
+	private pickUniform: Uniform | undefined
+	private pickResultStorage: Storage | undefined
+	private pickBindGroup: GPUBindGroup | undefined
+	private pickPipeline: GPUComputePipeline | undefined
+
 	/**
 	 * position 为散点坐标数组长度为2 * total，radius 为散点大小数组长度为2 * total，color 为散点颜色数组长度为4 * total（color的四个分量取值范围为0到1）
 	 * radius, startTime 和 color可选，用于给每个散点单独设置大小, 时间和颜色，如果设置了 radius 和 color，renderer 会忽略 style.color|radius
@@ -237,6 +248,7 @@ class Points extends Model implements IPlayable {
 			stepMode: 'instance',
 			shaderLocation: 0,
 			capacity: this.total * 2,
+			usage: BufferType.VERTEX_STORAGE,
 		})
 		this.geometry.setAttribute('position', positionAttribute)
 
@@ -264,6 +276,7 @@ class Points extends Model implements IPlayable {
 
 	private reallocate() {
 		console.log('reallocating')
+		this.pickBindGroup = undefined
 		for (let attr of this.geometry.getAttributes()) {
 			attr.reallocate(this.total * attr.itemSize)
 		}
@@ -320,6 +333,137 @@ class Points extends Model implements IPlayable {
 
 	public updateCurrentTime(time: number): void {
 		this.material.updateUniform('currentTime', time)
+	}
+
+	public async pick(
+		renderer: Renderer,
+		x: number,
+		y: number,
+		radius: number = 5
+	): Promise<number[]> {
+		const device = renderer.device
+		const backend = renderer.webgpuBackend
+
+		// 1. Create Buffers if not exist
+		if (!this.pickUniform || !this.pickResultStorage) {
+			const defs = makeShaderDataDefinitions(computeShader)
+
+			if (!this.pickUniform) {
+				this.pickUniform = new Uniform({
+					id: 'pick-uniform',
+					name: 'params',
+					def: defs.uniforms['params'],
+					value: {
+						targetPos: [x, y],
+						radiusSq: radius * radius,
+						total: this.total,
+					},
+				})
+			}
+
+			if (!this.pickResultStorage) {
+				this.pickResultStorage = new Storage({
+					id: 'pick-result',
+					name: 'result',
+					def: defs.storages['result'],
+					value: {
+						count: 0,
+						indices: new Uint32Array(1024),
+					},
+				})
+				this.pickResultStorage.usage = BufferType.READ_WRITE_STORAGE
+			}
+		}
+
+		// 2. Update Uniforms
+		this.pickUniform.updateValue({
+			targetPos: [x, y],
+			radiusSq: radius * radius,
+			total: this.total,
+		})
+		this.pickUniform.updateBuffer(backend)
+
+		// 3. Reset Result Count
+		// Use structured update
+		this.pickResultStorage.updateValue({
+			count: 0,
+			indices: new Uint32Array(1024), // Resetting indices as well, though not strictly necessary if we only read based on count
+		})
+		this.pickResultStorage.updateBuffer(backend)
+
+		// 4. Get Pipeline
+		if (!this.pickPipeline) {
+			this.pickPipeline = backend.getPipelineManager().getOrCreateComputePipeline({
+				id: 'points-picking',
+				version: 1,
+				options: {
+					label: 'points-picking-pipeline',
+					shaderCode: computeShader,
+					entryPoint: 'main',
+				},
+			})
+		}
+
+		// 5. Create BindGroup if needed
+		const positionAttr = this.geometry.getAttribute('position')
+		if (!positionAttr) return []
+
+		// Ensure position buffer is created
+		positionAttr.updateBuffer(backend)
+		const positionBuffer = positionAttr.buffer
+
+		if (!positionBuffer || !positionBuffer.GPUBuffer) return []
+
+		if (!this.pickBindGroup) {
+			// Ensure result buffer is created
+			this.pickResultStorage.updateBuffer(backend)
+			const resultGPUBuffer = this.pickResultStorage.buffer?.GPUBuffer
+			const uniformGPUBuffer = this.pickUniform.buffer?.GPUBuffer
+
+			if (!resultGPUBuffer || !uniformGPUBuffer) return []
+
+			this.pickBindGroup = device.createBindGroup({
+				layout: this.pickPipeline.getBindGroupLayout(0),
+				entries: [
+					{ binding: 0, resource: { buffer: positionBuffer.GPUBuffer } },
+					{ binding: 1, resource: { buffer: uniformGPUBuffer } },
+					{ binding: 2, resource: { buffer: resultGPUBuffer } },
+				],
+			})
+		}
+
+		// 6. Dispatch
+		const commandEncoder = device.createCommandEncoder()
+		const pass = commandEncoder.beginComputePass()
+		pass.setPipeline(this.pickPipeline)
+		pass.setBindGroup(0, this.pickBindGroup)
+		pass.dispatchWorkgroups(Math.ceil(this.total / 64))
+		pass.end()
+
+		// 7. Read Back
+		const resultSize = 4 + 1024 * 4
+		const readBuffer = device.createBuffer({
+			size: resultSize,
+			usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+		})
+
+		const resultGPUBuffer = this.pickResultStorage.buffer?.GPUBuffer
+		if (!resultGPUBuffer) return []
+
+		commandEncoder.copyBufferToBuffer(resultGPUBuffer, 0, readBuffer, 0, resultSize)
+		device.queue.submit([commandEncoder.finish()])
+
+		await readBuffer.mapAsync(GPUMapMode.READ)
+		const resultData = new Uint32Array(readBuffer.getMappedRange())
+		const count = resultData[0]
+		const indices: number[] = []
+		for (let i = 0; i < Math.min(count, 1024); i++) {
+			indices.push(resultData[i + 1])
+		}
+		readBuffer.unmap()
+		readBuffer.destroy()
+
+		return indices
 	}
 }
 

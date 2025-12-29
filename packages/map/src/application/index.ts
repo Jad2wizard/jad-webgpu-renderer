@@ -1,3 +1,4 @@
+import { Vector2 } from 'three'
 import EventEmitter from 'eventemitter3'
 import TileMap, { TileLayer } from './tile'
 import Renderer from './renderer'
@@ -86,7 +87,7 @@ class GMap extends EventEmitter {
 	}
 
 	addLayer<T extends LayerType>(layerId: string, layerType: T, layerProps: LayerProps[T]) {
-		return this._layerManager.createLayer<T>(layerId, layerType, layerProps)
+		return this._layerManager.addLayer<T>(layerId, layerType, layerProps)
 	}
 
 	removeLayer(layerId: string) {
@@ -128,6 +129,19 @@ class GMap extends EventEmitter {
 		if (combinedExtent) {
 			this.view.fitBounds(combinedExtent)
 		}
+	}
+
+	handleInteractEvent(
+		type: string,
+		params: { x: number; y: number; left: number; top: number; data?: any }
+	) {
+		const lnglat = this.view.world2Lonlat(new Vector2(params.x, params.y))
+		const eventData = {
+			...params,
+			lng: lnglat[0],
+			lat: lnglat[1],
+		}
+		this.emit(type, eventData)
 	}
 
 	private initTileMap(props: IProps) {

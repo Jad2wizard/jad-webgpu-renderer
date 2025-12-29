@@ -65,6 +65,21 @@ class View {
 		return this._camera
 	}
 
+	public getZoom() {
+		// 根据相机高度反推 zoom
+		const fov = this.calcFov(this.height)
+		const height = this.camera.position.z
+		const fovRad = (fov * Math.PI) / 180
+		const halfScreenWorldSize = height * Math.tan(fovRad / 2)
+		const resolution = (halfScreenWorldSize * 2) / this.height
+		return Math.log2(INITIAL_RESOLUTION / resolution)
+	}
+
+	// 获取当前像素分辨率（米/像素）
+	public getResolution() {
+		return INITIAL_RESOLUTION / Math.pow(2, this.getZoom())
+	}
+
 	public animate() {
 		this.camera.updateMatrixWorld()
 		this.camera.updateProjectionMatrix()

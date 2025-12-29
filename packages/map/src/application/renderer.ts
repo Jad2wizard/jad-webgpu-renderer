@@ -53,6 +53,10 @@ class Renderer {
 	public dispose(parentElement: HTMLElement) {
 		parentElement.removeChild(this._canvas)
 	}
+
+	get webgpuRenderer() {
+		return this._renderer
+	}
 }
 
 export default Renderer

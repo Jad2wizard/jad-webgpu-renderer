@@ -3,6 +3,20 @@ import moment from 'moment'
 import { TypedArray } from 'three'
 import * as _ from 'lodash'
 
+/**
+ * 计算字符串的 FNV-1a 哈希值
+ * @param str 输入字符串
+ * @returns 32位哈希值字符串
+ */
+export const hashString = (str: string): string => {
+	let hash = 2166136261
+	for (let i = 0; i < str.length; i++) {
+		hash ^= str.charCodeAt(i)
+		hash = Math.imul(hash, 16777619)
+	}
+	return (hash >>> 0).toString(16)
+}
+
 export const genId = () => {
 	return moment().valueOf() + '_' + ((Math.random() * 1000000) | 0)
 }

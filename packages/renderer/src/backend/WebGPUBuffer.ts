@@ -43,6 +43,8 @@ export class BufferManager {
 				return GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
 			case BufferType.READ_WRITE_STORAGE:
 				return GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
+			case BufferType.VERTEX_STORAGE:
+				return GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
 			default:
 				throw new Error(`Unsupported buffer type: ${type}`)
 		}

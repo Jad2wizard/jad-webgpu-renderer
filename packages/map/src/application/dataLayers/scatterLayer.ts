@@ -168,8 +168,27 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		this.map = undefined
 	}
 
+	async pick(x: number, y: number): Promise<Data> {
+		if (!this.points || !this.map) return []
+
+		const renderer = this.map.renderer.webgpuRenderer
+		if (!renderer) return []
+
+		// 转换半径：像素 -> 世界坐标单位
+		const resolution = this.map.view.getResolution()
+		const worldRadius = this.style.radius * resolution
+
+		const indices = await this.points.pick(renderer, x, y, worldRadius)
+		const pickedData: Data = []
+		for (const index of indices) {
+			if (this.inputData[index]) {
+				pickedData.push(this.inputData[index])
+			}
+		}
+		return pickedData
+	}
+
 	private parseData(data: Data) {
-		const start = performance.now()
 		const len = data.length
 
 		const { positions, extent } = parsePositionsAndExtent(
@@ -177,11 +196,6 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 			this.fields.lon,
 			this.fields.lat,
 			(lon, lat) => this.map!.view.lonlat2WorldFast(lon, lat)
-		)
-
-		const end = performance.now()
-		console.log(
-			`[ScatterLayer] Position transformation for ${len} points took ${end - start}ms`
 		)
 
 		const startTimes = !!this.fields.startTime ? new Float32Array(len) : undefined

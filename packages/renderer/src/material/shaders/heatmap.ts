@@ -22,6 +22,7 @@ export const genComputeHeatValueShaderCode = (hasStartTime: boolean) => `
     @group(0) @binding(4) var<uniform> currentTime: f32;
 
     @vertex fn vs(vert: Vertex) ->  VSOutput{
+        //由于 webgpu 不支持设置点的大小，所以定义一个一像素大小的正方形，每个热力点会被渲染六次，对应正方形中的六个顶点
         let points = array(
             vec2f(-1, -1),
             vec2f( 1, -1),
@@ -31,12 +32,16 @@ export const genComputeHeatValueShaderCode = (hasStartTime: boolean) => `
             vec2f( 1,  1),
         );
 
+        //获取热力点此次渲染时在正方形上的局部坐标
         let pos = points[vert.vi];
+        //计算热力点的裁剪空间坐标
         let clipPos = projectionMatrix * viewMatrix * vec4f(vert.position, 0, 1);
+        //将热力点的局部坐标转换为裁剪空间坐标
         let pointPos = vec4f(pos * radius * 2 / resolution * clipPos.w, 0, 0);
 
         var vsOut: VSOutput;
         vsOut.position = clipPos + pointPos;
+        //将热力点在正方形上的局部坐标传给 fs，用于画圆
         vsOut.pointCoord = pos;
         ${hasStartTime ? 'vsOut.time = vert.startTime;' : ''}
 

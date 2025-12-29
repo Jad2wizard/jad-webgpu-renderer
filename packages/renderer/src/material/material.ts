@@ -15,7 +15,7 @@ type IProps = {
 	vertexShaderEntry?: string
 	fragmentShaderEntry?: string
 	uniforms?: Record<string, any>
-	storages?: Record<string, TypedArray | undefined | Storage>
+	storages?: Record<string, any>
 	blending?: Blending
 	presentationFormat?: GPUTextureFormat
 	renderBindGroupLayoutDescriptors?: GPUBindGroupLayoutDescriptor[]
@@ -132,18 +132,16 @@ class Material {
 		return defs
 	}
 
-	public getUniform(name: string): Uniform | null {
-		const uniform = this.uniforms[name]
-		return uniform || null
+	public getUniform(name: string): Uniform | undefined {
+		return this.uniforms[name]
+	}
+
+	public getStorage(name: string): Storage | undefined {
+		return this.storages[name]
 	}
 
 	public getUniforms() {
 		return this.uniforms
-	}
-
-	public getStorage(name: string): Storage | null {
-		const storage = this.storages[name]
-		return storage || null
 	}
 
 	public getStorages() {

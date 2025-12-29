@@ -10,7 +10,7 @@ class Interacts {
 	private mouseDownCoord: { left: number; top: number; x: number; y: number }
 	private dragging = false
 
-	//以下三个参数用于在 onMouseUp 中判断鼠标点击事件是click 还是 dbclick
+	//以下三个参数用于在 onMouseUp 中判断鼠标点击事件是click 还是 dblclick
 	private firstClickTime = 0
 	private clickTimer: NodeJS.Timeout | null = null
 	private clickDelay = 250
@@ -38,23 +38,23 @@ class Interacts {
 	private onMouseDown = (e: MouseEvent) => {
 		this.dragging = true
 		this.mouseDownCoord = this.calcCoord(e)
-		this.map.emit('mousedown', this.mouseCoord)
+		this.map.handleInteractEvent('mousedown', this.mouseCoord)
 	}
 
 	//记录鼠标实时坐标，并通过 map 触发 mousemove 事件
 	private onMouseMove = (e: MouseEvent) => {
 		this.mouseCoord = this.calcCoord(e)
 		if (this.dragging) {
-			this.map.emit('drag', this.mouseCoord)
+			this.map.handleInteractEvent('drag', this.mouseCoord)
 		} else {
-			this.map.emit('hover', this.mouseCoord)
+			this.map.handleInteractEvent('hover', this.mouseCoord)
 		}
 	}
 
 	private onMouseUp = (e: MouseEvent) => {
 		const mouseCoord = this.calcCoord(e)
 		this.dragging = false
-		this.map.emit('mouseup', this.mouseCoord)
+		this.map.handleInteractEvent('mouseup', this.mouseCoord)
 		if (
 			Math.abs(mouseCoord.left - this.mouseDownCoord.left) +
 				Math.abs(mouseCoord.top - this.mouseDownCoord.top) >
@@ -67,15 +67,18 @@ class Interacts {
 			this.firstClickTime = performance.now()
 			this.clickTimer = setTimeout(() => {
 				if (e.button === 0) {
-					this.map.emit('click', mouseCoord)
+					// 先触发不带数据的 click 事件
+					this.map.handleInteractEvent('click', mouseCoord)
+					// 然后执行拾取，如果拾取到数据，会再次触发 click 事件（带 data）
+					this.pick(mouseCoord)
 				} else if (e.button === 2) {
-					this.map.emit('rightClick', mouseCoord)
+					this.map.handleInteractEvent('rightClick', mouseCoord)
 				}
 				this.firstClickTime = 0
 				this.clickTimer = null
 			}, this.clickDelay)
 		} else if (performance.now() - this.firstClickTime < this.clickDelay) {
-			this.map.emit('dbclick', mouseCoord)
+			this.map.handleInteractEvent('dblclick', mouseCoord)
 			if (this.clickTimer) {
 				clearTimeout(this.clickTimer)
 				this.clickTimer = null
@@ -92,6 +95,19 @@ class Interacts {
 		if (this.clickTimer) {
 			clearTimeout(this.clickTimer)
 			this.clickTimer = null
+		}
+	}
+
+	private async pick(mouseCoord: { left: number; top: number; x: number; y: number }) {
+		const layers = this.map.layerManager.layers
+		for (let layer of layers) {
+			if (layer.pick) {
+				const data = await layer.pick(mouseCoord.x, mouseCoord.y)
+				if (data.length > 0) {
+					console.log('Picked data:', data)
+					this.map.handleInteractEvent('click', { ...mouseCoord, data })
+				}
+			}
 		}
 	}
 }

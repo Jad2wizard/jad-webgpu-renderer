@@ -72,11 +72,11 @@ class Uniform {
 	}
 
 	public updateBuffer(backend: WebGPUBackend) {
-		if (this.needsUpdate && this.view.arrayBuffer) {
+		if (this.needsUpdate && this.view) {
 			if (!this._buffer) {
 				// 创建新的 buffer
 				this._buffer = backend.createBuffer({
-					label: this.id,
+					label: this._id,
 					type: BufferType.UNIFORM,
 					resourceName: this._name,
 					size: this.view.arrayBuffer.byteLength,
@@ -87,6 +87,8 @@ class Uniform {
 				backend.updateBuffer(this._buffer, this.view.arrayBuffer)
 			}
 			this.needsUpdate = false
+			return true
+		} else if (this._buffer) {
 			return true
 		}
 		return false

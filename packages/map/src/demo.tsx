@@ -134,12 +134,34 @@ const Demo = () => {
 				tileLayer: createTileLayer(tile_url_template),
 				autoFit: true,
 			})
+			const gmap = gmapRef.current
+			gmap.on('mousedown', (e) => {
+				console.log('mousedown', e)
+			})
+			gmap.on('mouseup', (e) => {
+				console.log('mouseup', e)
+			})
+			gmap.on('click', (e) => {
+				console.log('click', e)
+			})
+			gmap.on('rightclick', (e) => {
+				console.log('rightclick', e)
+			})
+			gmap.on('dblclick', (e) => {
+				console.log('dblclick', e)
+			})
+			// gmap.on('drag', (e) => {
+			// 	console.log('drag', e)
+			// })
+			// gmap.on('hover', (e) => {
+			// 	console.log('hover', e)
+			// })
 
 			// 初始视角定位到北京附近
 			gmapRef.current.view.setCenter([116.4, 39.9])
 			gmapRef.current.view.setZoom(10) // Zoom in a bit
 
-			const { heatmapData, pathsData, scatterData } = generateDemoData(1000000)
+			const { heatmapData, pathsData, scatterData } = generateDemoData(200)
 
 			// 1. Heatmap Layer
 			// const heatmapLayer = gmapRef.current.addLayer('heatmap-layer', 'heatmap', {
