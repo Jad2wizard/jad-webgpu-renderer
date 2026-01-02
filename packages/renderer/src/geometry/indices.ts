@@ -64,7 +64,7 @@ class Index {
 		//@ts-ignore
 		this._array = undefined
 		if (this._buffer) {
-			// Buffer 的销毁由 BufferManager 统一管理
+			this._buffer.dispose()
 			this._buffer = null
 		}
 	}

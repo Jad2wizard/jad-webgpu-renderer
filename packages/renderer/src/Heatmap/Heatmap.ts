@@ -12,9 +12,7 @@ import Renderer from '../Renderer'
 import { Camera } from '../camera/camera'
 import Attribute from '../geometry/attribute'
 import { deepMerge, genId } from '../utils'
-import { RenderGraph } from '../pass/RenderGraph'
-import { HeatPointsPass, MaxHeatValuePass } from './HeatmapPasses'
-import { HeatmapRenderPass } from './HeatmapRenderPass'
+import { HeatPointsPass, MaxHeatValuePass, HeatmapRenderPass } from './HeatmapPasses'
 import { Pass } from '../pass/Pass'
 
 // Constants
@@ -58,8 +56,8 @@ class Heatmap extends Model implements IPlayable {
 	private points: Float32Array
 	private startTime?: Float32Array
 	// heatPointsModel 和 maxHeatValueModel 都是在 preRender 阶段执行的渲染
-	private heatPointsModel?: Model // 负责将根据热力点的坐标和半径渲染各个像素的热力值到输出纹理的R 通道
-	private maxHeatValueModel?: Model // 负责根据 heatPointsModel 的输出纹理计算所有像素的最大热力值
+	private heatPointsModel: Model // 负责将根据热力点的坐标和半径渲染各个像素的热力值到输出纹理的R 通道
+	private maxHeatValueModel: Model // 负责根据 heatPointsModel 的输出纹理计算所有像素的最大热力值
 	private _total: number
 	private _cachedColorOffsets: Float32Array | null = null
 	private lastResolution = { width: 0, height: 0 }
@@ -100,6 +98,9 @@ class Heatmap extends Model implements IPlayable {
 
 		this.points = points
 		this.startTime = startTime
+
+		this.initHeatPointsModel()
+		this.initMaxHeatValueModel()
 	}
 
 	get style() {
@@ -141,7 +142,11 @@ class Heatmap extends Model implements IPlayable {
 		const { width, height } = renderer
 		const textureFactory = renderer.webgpuBackend.getTextureFactory()
 
-		const heatValueTexture = textureFactory.createHeatValueTexture(width, height)
+		const heatValueTexture = textureFactory.createTexture({
+			size: [width, height, 1],
+			format: 'rgba16float', // 因为需要使用纹理的 R 通道存放像素的热力值，故需要选择高精度的浮点数格式，而 rgba32float 又不支持multisample。
+			usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+		})
 		this.updateTexture('heatValTex', heatValueTexture)
 	}
 
@@ -153,15 +158,15 @@ class Heatmap extends Model implements IPlayable {
 	private createMaxHeatValueTexture(renderer: Renderer) {
 		const textureFactory = renderer.webgpuBackend.getTextureFactory()
 
-		const maxHeatValueTexture = textureFactory.createMaxHeatValueTexture()
+		const maxHeatValueTexture = textureFactory.createTexture({
+			size: [1, 1, 1],
+			format: 'rgba16float',
+			usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+		})
 		this.updateTexture('maxValTex', maxHeatValueTexture)
 	}
 
-	private createHeatPointsModel(renderer: Renderer) {
-		if (!this.textures['heatValTex']) {
-			throw new Error('Heat value texture must be created before heat points model')
-		}
-
+	private initHeatPointsModel() {
 		const geo = new Geometry(this.id + '-heat-points-geometry')
 		const positionAttribute = new Attribute('position', this.points, 2, {
 			stepMode: 'instance',
@@ -197,10 +202,9 @@ class Heatmap extends Model implements IPlayable {
 		this.heatPointsModel = new Model(this.id + '-heat-points-model', geo, mat)
 	}
 
-	private createMaxHeatValueModel(renderer: Renderer) {
-		const { width, height } = renderer
+	private initMaxHeatValueModel() {
 		const geo = new Geometry(this.id + '-max-heat-value-geometry')
-		geo.vertexCount = (width * height) / sampleRate / sampleRate //获取最大热力值时不用遍历全部像素点，进行降采样可以节省时间开销
+		geo.vertexCount = 0 // Will be updated when resolution is known
 		const mat = new Material({
 			id: this.id + '-max-heat-value-material',
 			renderCode: computeMaxHeatValueShaderCode,
@@ -229,7 +233,7 @@ class Heatmap extends Model implements IPlayable {
 			this.createHeatValueTexture(renderer)
 		}
 
-		if (resolutionChanged && this.maxHeatValueModel) {
+		if (resolutionChanged) {
 			this.maxHeatValueModel.geometry.vertexCount = (width * height) / sampleRate / sampleRate
 		}
 
@@ -237,7 +241,6 @@ class Heatmap extends Model implements IPlayable {
 	}
 
 	private reallocate() {
-		if (!this.heatPointsModel) return
 		for (let attr of this.heatPointsModel.geometry.getAttributes()) {
 			attr.reallocate(this.total * attr.itemSize)
 		}
@@ -271,34 +274,22 @@ class Heatmap extends Model implements IPlayable {
 	public getPasses(renderer: Renderer, camera: Camera, loadOp: GPULoadOp = 'load'): Pass[] {
 		this.checkCreateHeatValueTexture(renderer)
 		if (!this.textures['maxValTex']) this.createMaxHeatValueTexture(renderer)
-		if (!this.heatPointsModel) this.createHeatPointsModel(renderer)
-		if (!this.maxHeatValueModel) this.createMaxHeatValueModel(renderer)
+
+		const heatValTex = this.textures['heatValTex'] as GPUTexture
+		const maxValTex = this.textures['maxValTex'] as GPUTexture
+
+		if (!heatValTex || !maxValTex) {
+			throw new Error('Heatmap textures not initialized')
+		}
 
 		const passes: Pass[] = []
 
 		// Add passes
-		if (this.heatPointsModel) {
-			const heatPass = new HeatPointsPass(this.heatPointsModel, camera, 'heatValTex')
-			const heatValTex = this.textures['heatValTex']
-			if (heatValTex) {
-				renderer.addResource('heatValTex', heatValTex)
-			}
-			passes.push(heatPass)
-		}
+		const heatPass = new HeatPointsPass(this.heatPointsModel, camera, heatValTex)
+		passes.push(heatPass)
 
-		if (this.maxHeatValueModel) {
-			const maxPass = new MaxHeatValuePass(
-				this.maxHeatValueModel,
-				camera,
-				'heatValTex',
-				'maxValTex'
-			)
-			const maxHeatValTex = this.textures['maxValTex']
-			if (maxHeatValTex) {
-				renderer.addResource('maxValTex', maxHeatValTex)
-			}
-			passes.push(maxPass)
-		}
+		const maxPass = new MaxHeatValuePass(this.maxHeatValueModel, camera, heatValTex, maxValTex)
+		passes.push(maxPass)
 
 		// Add final render pass
 		const renderPass = new HeatmapRenderPass(
@@ -306,25 +297,20 @@ class Heatmap extends Model implements IPlayable {
 			camera,
 			'output',
 			loadOp,
-			loadOp === 'clear' ? renderer.webgpuBackend.getClearColor() : undefined
+			loadOp === 'clear' ? renderer.clearColor : undefined
 		)
-		// Note: 'output' resource should be managed by the renderer or global render graph
-		// But here we might not need to explicitly register 'output' if it's the screen
-		// For now, let's assume 'output' is handled by the backend or we map it to screen
 		passes.push(renderPass)
 
 		return passes
 	}
 
 	public updateCurrentTime(time: number): void {
-		if (this.heatPointsModel) {
-			this.heatPointsModel.material.updateUniform('currentTime', time)
-		}
+		this.heatPointsModel.material.updateUniform('currentTime', time)
 	}
 
 	public setStyle(style: Exclude<IProps['style'], undefined>) {
 		this._style = deepMerge(this.style, style)
-		if ('radius' in style && this.heatPointsModel) {
+		if ('radius' in style) {
 			this.heatPointsModel.material.updateUniform('radius', style['radius'])
 		}
 		if ('blur' in style) {
@@ -351,7 +337,6 @@ class Heatmap extends Model implements IPlayable {
 		if (points.length % 2 !== 0) {
 			throw new Error('Points array length must be even (x,y pairs)')
 		}
-		if (!this.heatPointsModel) return
 		const appendLen = points.length / 2
 		if (startTime && startTime.length !== appendLen) {
 			throw new Error('StartTime array length must match number of points')
@@ -379,12 +364,8 @@ class Heatmap extends Model implements IPlayable {
 		super.dispose()
 
 		// Dispose models
-		if (this.maxHeatValueModel) this.maxHeatValueModel.dispose()
-		if (this.heatPointsModel) this.heatPointsModel.dispose()
-
-		// Clear references
-		this.heatPointsModel = undefined
-		this.maxHeatValueModel = undefined
+		this.maxHeatValueModel.dispose()
+		this.heatPointsModel.dispose()
 
 		// Clear cached data
 		this._cachedColorOffsets = null

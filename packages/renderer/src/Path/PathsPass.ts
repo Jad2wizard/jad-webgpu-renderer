@@ -31,19 +31,16 @@ export class PathsPass extends RenderPass {
 		if (!outputTexture) {
 			throw new Error(`Resource ${this.outputResourceName} not found`)
 		}
-		const outputView = outputTexture.createView()
 
-		const backend = renderer.webgpuBackend
-		backend
-			.getRenderPassManager()
-			.executePathsRenderPass(
-				encoder,
-				this.paths,
-				outputView,
-				renderer,
-				this.camera,
-				this.loadOp,
-				this.clearValue
-			)
+		const passDesc = RenderPass.createRenderPassDescriptor(
+			'paths renderPass',
+			outputTexture,
+			this.clearValue,
+			this.loadOp,
+			'store'
+		)
+		const pass = encoder.beginRenderPass(passDesc)
+		this.paths.render(renderer, pass, this.camera)
+		pass.end()
 	}
 }

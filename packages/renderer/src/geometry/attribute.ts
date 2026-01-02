@@ -14,6 +14,7 @@ class Attribute {
 	private _name: string
 	private _array: TypedArray
 	private _itemSize: number
+	private _capacity: number
 	private _buffer: Buffer | null = null
 	private _shaderLocation?: number
 	private _stepMode: GPUVertexStepMode = 'vertex'
@@ -27,7 +28,7 @@ class Attribute {
 		this._shaderLocation = options?.shaderLocation
 		if (options?.stepMode) this._stepMode = options.stepMode
 		if (options?.usage) this._usage = options.usage
-		// Buffer 将在 updateBuffer 时创建
+		if (options?.capacity) this._capacity = options.capacity
 	}
 
 	get needsUpdate() {
@@ -48,6 +49,10 @@ class Attribute {
 
 	get shaderLocation() {
 		return this._shaderLocation
+	}
+
+	get capacity() {
+		return this._capacity
 	}
 
 	set shaderLocation(l: number | undefined) {
@@ -80,7 +85,18 @@ class Attribute {
 	}
 
 	public updateBuffer(backend: WebGPUBackend) {
-		if (this.needsUpdate && this._array) {
+		if (this.needsUpdate && this.array) {
+			if (this.capacity) {
+				// 容量大于0，使用容量计算 bufferSize
+				const bufferSize = this._capacity * this._itemSize * this._array.BYTES_PER_ELEMENT
+				//如果 bufferSize 大于当前数组长度，需要重新创建数组
+				if (bufferSize > this.array.byteLength) {
+					//@ts-ignore
+					const newArray = new this._array.constructor(this._capacity * this._itemSize)
+					newArray.set(this.array)
+					this._array = newArray
+				}
+			}
 			if (!this._buffer) {
 				// 创建新的 buffer
 				const resourceName = 'attrubite_' + this._name
@@ -212,7 +228,7 @@ class Attribute {
 		//@ts-ignore
 		this._array = undefined
 		if (this._buffer) {
-			// Buffer 的销毁由 BufferManager 统一管理
+			this._buffer.dispose()
 			this._buffer = null
 		}
 	}

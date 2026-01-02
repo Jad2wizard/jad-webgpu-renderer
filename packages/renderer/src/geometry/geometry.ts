@@ -158,6 +158,10 @@ class Geometry {
 			this.attributes[name].dispose()
 		}
 		this.attributes = {}
+		if (this.index) {
+			this.index.dispose()
+			this.index = null
+		}
 	}
 }
 

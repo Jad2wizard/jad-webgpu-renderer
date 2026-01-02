@@ -15,9 +15,6 @@ export class ClearPass extends RenderPass {
 	execute(renderer: Renderer, encoder: GPUCommandEncoder, resources: ResourceProvider): void {
 		const outputTexture = resources.getResource(this.outputResourceName) as GPUTexture
 		if (!outputTexture) {
-			// If output is screen, it might be dynamic, so we check again or throw
-			// In Renderer implementation, 'output' returns current texture
-			// But if it's not found (e.g. context lost), we skip
 			return
 		}
 		const outputView = outputTexture.createView()

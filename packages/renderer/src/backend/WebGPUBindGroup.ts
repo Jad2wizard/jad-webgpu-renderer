@@ -91,6 +91,8 @@ export class WebGPUBindGroupManager {
 	createMaterialBindGroups(
 		label: string,
 		pipeline: GPURenderPipeline,
+		pipelineId: string,
+		pipelineVersion: number,
 		uniforms: Record<string, Uniform>,
 		storages: Record<string, Storage>,
 		textureInfos: Record<string, { group: number; binding: number }>,
@@ -101,16 +103,18 @@ export class WebGPUBindGroupManager {
 	): { bindGroups: GPUBindGroup[]; groupIndexList: number[] } {
 		const bindGroups: GPUBindGroup[] = []
 
-		// 收集所有uniform变量的组索引
 		const uniformGroupIndexs = Object.values(uniforms).map((u) => u.group)
-		// 收集所有storage变量的组索引
 		const storageGroupIndexs = Object.values(storages).map((u) => u.group)
+		const textureGroupIndexs = Object.values(textureInfos).map((t) => t.group)
 
-		// 合并并去重所有组索引，确保每个组只处理一次
-		const groupIndexList = Array.from(new Set([...uniformGroupIndexs, ...storageGroupIndexs]))
+		const groupIndexList = Array.from(
+			new Set([...uniformGroupIndexs, ...storageGroupIndexs, ...textureGroupIndexs])
+		).sort((a, b) => a - b)
 
 		// 遍历每个绑定组索引，为每个组创建对应的绑定组
 		for (let index of groupIndexList) {
+			const layout = pipeline.getBindGroupLayout(index)
+
 			// 用于暂存条目和生成 Cache Key 的信息
 			const pendingEntries: {
 				binding: number
@@ -151,17 +155,21 @@ export class WebGPUBindGroupManager {
 					buffer = uniform.buffer?.GPUBuffer || null
 				}
 
-				if (buffer) {
-					const resId = this.getResourceId(buffer)
-					pendingEntries.push({
-						binding: uniform.binding,
-						resource: { buffer, offset: 0, size: uniform.size },
-						cacheId: `B:${resId}`,
-					})
+				if (!buffer) {
+					throw new Error(
+						`BindGroup(${label}) missing uniform buffer: ${uniform.name} (group=${uniform.group}, binding=${uniform.binding})`
+					)
 				}
+
+				const resId = this.getResourceId(buffer)
+				pendingEntries.push({
+					binding: uniform.binding,
+					resource: { buffer, offset: 0, size: uniform.size },
+					cacheId: `B:${resId}@${uniform.size}`,
+				})
 			}
 
-			// 处理storage变量
+			// 处理storage变pendingEntries量
 			for (let sn in storages) {
 				const storage = storages[sn]
 				// 跳过不属于当前组的storage
@@ -169,14 +177,18 @@ export class WebGPUBindGroupManager {
 				// 如果需要更新，先更新缓冲区数据
 				if (storage.needsUpdate) storage.updateBuffer(backend)
 				const buffer = storage.buffer?.GPUBuffer
-				if (buffer) {
-					const resId = this.getResourceId(buffer)
-					pendingEntries.push({
-						binding: storage.binding,
-						resource: { buffer, offset: 0, size: storage.size },
-						cacheId: `B:${resId}`,
-					})
+				if (!buffer) {
+					throw new Error(
+						`BindGroup(${label}) missing storage buffer: ${storage.name} (group=${storage.group}, binding=${storage.binding})`
+					)
 				}
+
+				const resId = this.getResourceId(buffer)
+				pendingEntries.push({
+					binding: storage.binding,
+					resource: { buffer, offset: 0, size: storage.size },
+					cacheId: `B:${resId}@${storage.size}`,
+				})
 			}
 
 			// 处理纹理资源
@@ -185,8 +197,11 @@ export class WebGPUBindGroupManager {
 				// 跳过不属于当前组的纹理
 				if (group !== index) continue
 				const texture = textures[tn]
-				// 跳过未提供的纹理
-				if (!texture) continue
+				if (!texture) {
+					throw new Error(
+						`BindGroup(${label}) missing texture: ${tn} (group=${group}, binding=${binding})`
+					)
+				}
 
 				const resId = this.getResourceId(texture)
 				pendingEntries.push({
@@ -199,19 +214,18 @@ export class WebGPUBindGroupManager {
 			// 按 binding 排序以确保 Key 的唯一性
 			pendingEntries.sort((a, b) => a.binding - b.binding)
 
-			// 生成 Cache Key
-			// Key 格式: "Label|Index|Binding=Type:ID|Binding=Type:ID..."
 			const cacheKey =
-				`${label}|${index}|` +
+				`${pipelineId}-v${pipelineVersion}-g${index}|` +
 				pendingEntries.map((e) => `${e.binding}=${e.cacheId}`).join('|')
 
+			// console.log(cacheKey)
 			// 检查缓存
 			let bindGroup = this.bindGroupCache.get(cacheKey)
 			if (!bindGroup) {
 				// 创建绑定组
 				const descriptor: GPUBindGroupDescriptor = {
 					label: label + `-BindGroup-${index}`,
-					layout: pipeline.getBindGroupLayout(index),
+					layout,
 					entries: pendingEntries.map((entry) => ({
 						binding: entry.binding,
 						resource: entry.resource,

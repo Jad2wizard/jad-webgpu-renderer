@@ -1,8 +1,10 @@
+import { Color } from '@renderer/types'
+import { normalizeColor } from '@renderer/utils'
+import { WebGPUUtils } from './backend/WebGPUUtils'
 import Scene from './Scene'
 import { Camera } from './camera/camera'
 import { WebGPUBackend } from './backend'
 import { RenderGraph } from './pass/RenderGraph'
-import { ResourceProvider, ResourceHandle, Pass } from './pass/Pass'
 import { ClearPass } from './pass/ClearPass'
 import { ResolvePass } from './pass/ResolvePass'
 
@@ -13,21 +15,54 @@ type IProps = {
 	deviceLimits?: GPUDeviceDescriptor['requiredLimits']
 }
 
-class Renderer implements ResourceProvider {
+class Renderer {
 	private ready = false
 	private backend: WebGPUBackend
 	private renderGraph: RenderGraph
+	private multisampleTexture: GPUTexture | null = null
+	private _resolutionBuf: GPUBuffer
+
+	private _device: GPUDevice
+	private _context: GPUCanvasContext
+	private _format: GPUTextureFormat
+	private _canvas: HTMLCanvasElement
+	private _clearColor: Color = [0, 0, 0, 0] as Color
+	private _antialias: boolean = false
 
 	private constructor(props: IProps) {
-		this.backend = new WebGPUBackend(props.canvas, props)
-		this.renderGraph = new RenderGraph(this)
+		this._canvas = props.canvas
+		if (props.antialias !== undefined) this._antialias = props.antialias
+		if (props.clearColor !== undefined) this._clearColor = normalizeColor(props.clearColor)
 	}
 
 	static async create(props: IProps): Promise<Renderer> {
+		//使用 webgpuutils 初始化 device
+		const { device, context, format } = await WebGPUUtils.initWebGPU(props.canvas, {
+			antiAlias: props.antialias,
+			deviceLimits: props.deviceLimits,
+		})
+
+		context.configure({
+			device,
+			format,
+			alphaMode: 'premultiplied', // 确保透明度正确处理，输出到 canvas 上的颜色在 fragment shader中已经预乘过 alpha 值。浏览器合成器在混合 canvas 与网页背景时就不会再对 alpha 进行处理。
+		})
+
 		const instance = new Renderer(props)
+		instance._device = device
+		instance._context = context
+		instance._format = format
+		instance.backend = new WebGPUBackend(device)
+		instance.renderGraph = new RenderGraph(instance)
+
 		try {
-			await instance.backend.init()
+			instance._resolutionBuf = instance._device.createBuffer({
+				size: 2 * 4, //vec2f
+				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+				label: 'resolution buffer',
+			})
 			instance.ready = true
+			instance.resize()
 			return instance
 		} catch (e) {
 			instance.ready = false
@@ -35,45 +70,32 @@ class Renderer implements ResourceProvider {
 		}
 	}
 
-	getResource(handle: ResourceHandle): GPUTexture | GPUBuffer | undefined {
-		if (handle === 'output') {
-			if (this.antialias) {
-				return this.backend.getMultisampleTexture() || undefined
-			}
-			return this.backend.getContext().getCurrentTexture()
-		}
-		if (handle === 'screen') {
-			return this.backend.getContext().getCurrentTexture()
-		}
-		return this.renderGraph.getResource(handle)
-	}
-
-	addResource(handle: ResourceHandle, resource: GPUTexture | GPUBuffer): void {
-		this.renderGraph.addResource(handle, resource)
-	}
-
 	get width() {
-		return this.backend.getWidth()
+		return this._canvas.width
 	}
 
 	get height() {
-		return this.backend.getHeight()
+		return this._canvas.height
 	}
 
 	get device() {
-		return this.backend.getDevice()
+		return this._device
 	}
 
 	get presentationFormat() {
-		return this.backend.getPresentationFormat()
+		return this._format
 	}
 
 	get resolutionBuf() {
-		return this.backend.getResolutionBuffer()
+		return this._resolutionBuf
 	}
 
 	get antialias() {
-		return this.backend.getAntialias()
+		return this._antialias
+	}
+
+	get clearColor() {
+		return this._clearColor
 	}
 
 	get webgpuBackend() {
@@ -81,11 +103,31 @@ class Renderer implements ResourceProvider {
 	}
 
 	get context() {
-		return this.backend.getContext()
+		return this._context
 	}
 
 	resize = () => {
-		this.backend.resize()
+		this._canvas.width = this._canvas.offsetWidth
+		this._canvas.height = this._canvas.offsetHeight
+		this.updateResolution()
+		if (this._antialias) {
+			this.updateMultisampleTexture()
+		}
+	}
+
+	private updateResolution() {
+		const resolution = new Float32Array([this.width, this.height])
+		this._device.queue.writeBuffer(this._resolutionBuf, 0, resolution)
+	}
+
+	private updateMultisampleTexture() {
+		if (this.multisampleTexture) this.multisampleTexture.destroy()
+		const textureFactory = this.backend.getTextureFactory()
+		this.multisampleTexture = textureFactory.createMultisampleTexture(
+			this.width,
+			this.height,
+			this.presentationFormat
+		)
 	}
 
 	/**
@@ -100,23 +142,23 @@ class Renderer implements ResourceProvider {
 			throw new Error('Renderer not initialized. Call create() first')
 		}
 
-		// 1. 更新全局变量
-		this.backend.updateGlobalUniforms(camera)
+		camera.updateMatrixBuffers(this._device)
 
-		// 2. 准备渲染图
 		this.renderGraph.clear()
 
 		// 将全局资源注册到渲染图中
-		const outputResource = this.getResource('output')
+		const outputResource = this._antialias
+			? this.multisampleTexture || undefined
+			: this._context.getCurrentTexture()
+
 		if (outputResource) {
 			this.renderGraph.addResource('output', outputResource)
 		}
-		const screenResource = this.getResource('screen')
+		const screenResource = this._context.getCurrentTexture()
 		if (screenResource) {
 			this.renderGraph.addResource('screen', screenResource)
 		}
 
-		// 3. 收集 Pass 并管理清除操作
 		let outputLoadOp: GPULoadOp = 'clear'
 		let hasOutputPass = false
 
@@ -133,18 +175,16 @@ class Renderer implements ResourceProvider {
 			}
 		}
 
-		// 4. 如果没有绘制任何内容到 output，则使用 ClearPass 清屏
+		// 如果没有绘制任何内容到 output，则使用 ClearPass 清屏
 		if (!hasOutputPass) {
-			this.renderGraph.addPass(new ClearPass('output', this.backend.getClearColor()))
+			this.renderGraph.addPass(new ClearPass('output', this._clearColor))
 		}
 
-		// 5. 如果需要，执行 Resolve
 		if (this.antialias) {
 			// 添加 ResolvePass: output (MSAA) -> screen
 			this.renderGraph.addPass(new ResolvePass('output', 'screen'))
 		}
 
-		// 6. 执行
 		const encoder = this.device.createCommandEncoder()
 		this.renderGraph.execute(encoder)
 		this.device.queue.submit([encoder.finish()])

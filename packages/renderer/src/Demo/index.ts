@@ -159,7 +159,7 @@ async function initApp() {
 		// startTime: timestamps.subarray(0, 50),
 		position: pos,
 		// startTime: timestamps,
-		// color,
+		color,
 		radius: size,
 		// startTime: timestamps,
 		// total: 400,
@@ -177,16 +177,16 @@ async function initApp() {
 	// 	if (i > num) {
 	// 		clearInterval(timer)
 	// 	} else {
-	// 		// points.appendPoints({
-	// 		// 	position: pos.subarray(i * 2, (i + 50) * 2),
-	// 		// 	startTime: timestamps.subarray(i, i + 50),
-	// 		// 	color: color.subarray(i * 4, (i + 50) * 4),
-	// 		// 	radius: size.subarray(i, i + 50),
-	// 		// })
-	// 		heat.appendHeatPoints(
-	// 			heatPoints.subarray(i * 2, (i + 50) * 2),
-	// 			timestamps.subarray(i, i + 50)
-	// 		)
+	// 		points.appendPoints({
+	// 			position: pos.subarray(i * 2, (i + 50) * 2),
+	// 			startTime: timestamps.subarray(i, i + 50),
+	// 			color: color.subarray(i * 4, (i + 50) * 4),
+	// 			radius: size.subarray(i, i + 50),
+	// 		})
+	// 		// heat.appendHeatPoints(
+	// 		// 	heatPoints.subarray(i * 2, (i + 50) * 2),
+	// 		// 	timestamps.subarray(i, i + 50)
+	// 		// )
 	// 	}
 	// 	i += 50
 	// }, 500)
@@ -195,8 +195,8 @@ async function initApp() {
 	points.renderOrder = 0
 	paths.renderOrder = 2
 	scene.addModel(points)
-	scene.addModel(paths)
-	scene.addModel(heat)
+	// scene.addModel(paths)
+	// scene.addModel(heat)
 
 	let interval = 60
 	let lastTimestamp = 0
@@ -217,8 +217,8 @@ async function initApp() {
 		// }
 		const ct = ((time - start) * (totalTime / 400 / 20)) % timestamps[num - 1]
 		// console.log(ct)
-		paths.updateCurrentTime(ct)
-		heat.updateCurrentTime(((time - start) * (totalTime / 400 / 20)) % timestamps[num - 1])
+		// paths.updateCurrentTime(ct)
+		// heat.updateCurrentTime(((time - start) * (totalTime / 400 / 20)) % timestamps[num - 1])
 		renderer.render(scene, camera)
 		stats.end()
 		requestAnimationFrame(animate)

@@ -31,19 +31,16 @@ export class PointsPass extends RenderPass {
 		if (!outputTexture) {
 			throw new Error(`Resource ${this.outputResourceName} not found`)
 		}
-		const outputView = outputTexture.createView()
 
-		const backend = renderer.webgpuBackend
-		backend
-			.getRenderPassManager()
-			.executePointsRenderPass(
-				encoder,
-				this.points,
-				outputView,
-				renderer,
-				this.camera,
-				this.loadOp,
-				this.clearValue
-			)
+		const passDesc = RenderPass.createRenderPassDescriptor(
+			'points renderPass',
+			outputTexture,
+			this.clearValue,
+			this.loadOp,
+			'store'
+		)
+		const pass = encoder.beginRenderPass(passDesc)
+		this.points.render(renderer, pass, this.camera)
+		pass.end()
 	}
 }

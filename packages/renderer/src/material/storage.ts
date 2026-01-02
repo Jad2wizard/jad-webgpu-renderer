@@ -33,12 +33,9 @@ class Storage {
 		this._def = props.def
 		this._buffer = props.buffer || null
 
-		// Determine mode: Raw TypedArray or Structured
-		// If value is explicitly a TypedArray, use Raw mode (backward compatibility and simple arrays)
 		if (props.value && ArrayBuffer.isView(props.value)) {
 			this._value = props.value
 		} else if (this._def) {
-			// Try to use StructuredView if def is present and value is not a TypedArray
 			try {
 				this.view = makeStructuredView(this._def)
 				if (props.value) {
@@ -46,7 +43,7 @@ class Storage {
 				}
 				this._value = props.value
 			} catch (e) {
-				console.warn(`Failed to create structured view for storage ${this._name}`, e)
+				console.warn(`无法为 storage ${this._name}创建结构化视图`, e)
 				this._value = props.value || new Float32Array()
 			}
 		} else {
@@ -76,18 +73,13 @@ class Storage {
 
 	set def(v: VariableDefinition | undefined) {
 		this._def = v
-		// If we receive a def and don't have a view or raw value yet, we might want to initialize view?
-		// But usually def is set after construction in Material.
-		// If we are in Raw mode (existing _value is TypedArray), we likely stay in Raw mode.
 		if (v && !this.view && (!this._value || !ArrayBuffer.isView(this._value))) {
 			try {
 				this.view = makeStructuredView(v)
 				if (this._value) {
 					this.view.set(this._value)
 				}
-			} catch (e) {
-				// ignore
-			}
+			} catch (e) {}
 		}
 	}
 
@@ -163,7 +155,7 @@ class Storage {
 
 	public dispose() {
 		if (this._buffer) {
-			// Buffer 的销毁由 BufferManager 统一管理
+			this._buffer.dispose()
 			this._buffer = null
 		}
 	}

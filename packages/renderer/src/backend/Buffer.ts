@@ -15,7 +15,6 @@ export interface BufferOptions {
 	size: number
 	usage: GPUBufferUsageFlags
 	label?: string
-	initialData?: ArrayBuffer
 }
 
 export class Buffer {

@@ -157,7 +157,7 @@ export class Paths implements IRenderable {
 				camera,
 				'output',
 				loadOp,
-				loadOp === 'clear' ? renderer.webgpuBackend.getClearColor() : undefined
+				loadOp === 'clear' ? renderer.clearColor : undefined
 			),
 		]
 	}

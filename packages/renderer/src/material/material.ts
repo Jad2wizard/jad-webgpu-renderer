@@ -236,6 +236,8 @@ class Material {
 		return bindGroupManager.createMaterialBindGroups(
 			this.id,
 			pipeline,
+			this.id,
+			this.pipelineVersion,
 			this.uniforms,
 			this.storages,
 			this.textureInfos,

@@ -5,9 +5,11 @@ import Material from './material/material'
 import { IRenderable, TypedArray } from '@renderer/types'
 import { WebGPUBackend } from '@renderer/backend'
 
-import { Pass } from './pass/Pass'
+import { Pass, ResourceProvider } from './pass/Pass'
 
 type Options = {}
+
+import { indexFormat } from '@renderer/utils'
 
 class Model implements IRenderable {
 	protected _id: string
@@ -88,7 +90,53 @@ class Model implements IRenderable {
 	): void {
 		if (!this.visible) return
 		const backend = renderer.webgpuBackend as WebGPUBackend
-		backend.drawModel(this, renderer, pass, camera, textures || this.textures)
+		this.drawModel(backend, renderer, pass, camera, textures || this.textures)
+	}
+
+	/**
+	 * 根据camera获取projectionMatrix和viewMatrix，遍历scene.children。
+	 * 从children[i]中获取到geometry和material。从geometry中获取顶点数据，从material中获取渲染管线（包含着色器）
+	 * 每个模型设置一次renderPass，最后统一提交到GPU
+	 * @param camera
+	 * @param scene
+	 */
+	protected drawModel(
+		backend: WebGPUBackend,
+		renderer: Renderer,
+		pass: GPURenderPassEncoder,
+		camera: Camera,
+		textures: Record<string, GPUTexture>
+	): void {
+		const { material, geometry } = this
+		const vertexBufferLayouts = geometry.getVertexBufferLayout()
+		const pipeline = material.getPipeline(renderer, vertexBufferLayouts)
+		const { bindGroups, groupIndexList } = material.getBindGroups(
+			renderer,
+			camera,
+			backend,
+			textures,
+			vertexBufferLayouts
+		)
+
+		if (pipeline) pass.setPipeline(pipeline)
+		for (let i = 0; i < groupIndexList.length; i++) {
+			pass.setBindGroup(groupIndexList[i], bindGroups[i])
+		}
+
+		const vertexBuffers = geometry.updateVertexBuffers(backend)
+		for (let i = 0; i < vertexBuffers.length; i++) {
+			const buffer = vertexBuffers[i]
+			pass.setVertexBuffer(i, buffer.GPUBuffer!)
+		}
+
+		const instanceCount = geometry.instanceCount > -1 ? geometry.instanceCount : undefined
+		const indexBuffer = geometry.getIndexBuffer(backend)
+		if (indexBuffer && geometry.index) {
+			pass.setIndexBuffer(indexBuffer.GPUBuffer!, indexFormat as GPUIndexFormat)
+			pass.drawIndexed(geometry.index.array.length, instanceCount)
+		} else {
+			pass.draw(geometry.vertexCount, instanceCount)
+		}
 	}
 
 	public dispose() {
