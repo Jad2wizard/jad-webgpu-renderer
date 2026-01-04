@@ -1,12 +1,13 @@
 import { ComputePass, ResourceProvider } from '../pass/Pass'
 import Renderer from '../Renderer'
 import Points from './Points'
-import { computeShader } from '../material/shaders/pointsCompute'
+import { getComputeShader } from '../material/shaders/pointsCompute'
 
 export class PointsPickPass extends ComputePass {
 	private points: Points
 	private pickPipeline: GPUComputePipeline | undefined
 	private pickBindGroup: GPUBindGroup | undefined
+	private lastHasRadius: boolean | undefined
 
 	constructor(points: Points) {
 		super('PointsPickPass')
@@ -16,18 +17,24 @@ export class PointsPickPass extends ComputePass {
 	execute(renderer: Renderer, encoder: GPUCommandEncoder): void {
 		const device = renderer.device
 		const backend = renderer.webgpuBackend
+		const hasRadius = this.points.material.hasRadiusAttribute
 
 		// 1. Get Pipeline
-		if (!this.pickPipeline) {
+		// If hasRadius status changed, we need to recreate the pipeline or get the correct one
+		if (!this.pickPipeline || this.lastHasRadius !== hasRadius) {
+			const shaderCode = getComputeShader(hasRadius)
 			this.pickPipeline = backend.getPipelineManager().getOrCreateComputePipeline({
-				id: 'points-picking',
+				id: `points-picking-${hasRadius ? 'r' : 'u'}`,
 				version: 1,
 				options: {
 					label: 'points-picking-pipeline',
-					shaderCode: computeShader,
+					shaderCode,
 					entryPoint: 'main',
 				},
 			})
+			this.lastHasRadius = hasRadius
+			// Reset bind group because layout might have changed (binding 3)
+			this.pickBindGroup = undefined
 		}
 
 		const positionAttr = this.points.geometry.getAttribute('position')
@@ -43,25 +50,35 @@ export class PointsPickPass extends ComputePass {
 		if (!positionBuffer || !positionBuffer.GPUBuffer || !uniformGPUBuffer || !resultGPUBuffer)
 			return
 
-		// We should recreate BindGroup if buffers changed (e.g. resized).
-		// For simplicity, we assume if we have a bindgroup, it's valid unless explicitly invalidated.
-		// However, if buffers are re-allocated, the old bindgroup points to destroyed buffers.
-		// Points.ts reallocate() clears pickBindGroup. We need a way to know if we need to recreate it.
-		// We can check if cached bindgroup is valid? No easy way.
-		// We can rely on Points clearing this.pickBindGroup when reallocating.
-		// So PointsPickPass should expose a method to clear bindgroup?
-		// Or PointsPickPass checks if buffers match what it expects?
+		// Prepare BindGroup entries
+		const entries = [
+			{ binding: 0, resource: positionBuffer.GPUBuffer },
+			{ binding: 1, resource: uniformGPUBuffer },
+			{ binding: 2, resource: resultGPUBuffer },
+		]
 
-		if (!this.pickBindGroup) {
-			this.pickBindGroup = device.createBindGroup({
-				layout: this.pickPipeline.getBindGroupLayout(0),
-				entries: [
-					{ binding: 0, resource: { buffer: positionBuffer.GPUBuffer } },
-					{ binding: 1, resource: { buffer: uniformGPUBuffer } },
-					{ binding: 2, resource: { buffer: resultGPUBuffer } },
-				],
-			})
+		if (hasRadius) {
+			const radiusStorage = this.points.getRadiusStorage()
+			if (radiusStorage && radiusStorage.buffer?.GPUBuffer) {
+				entries.push({ binding: 3, resource: radiusStorage.buffer.GPUBuffer })
+			} else {
+				// Should not happen if hasRadiusAttribute is true, but safe guard
+				console.warn('PointsPickPass: hasRadius is true but no radius buffer found')
+			}
 		}
+
+		// We use BindGroupManager to handle caching and creation.
+		// It will automatically create a new BindGroup if buffers change (different IDs).
+		this.pickBindGroup = backend
+			.getBindGroupManager()
+			.createBindGroup(
+				`points-picking-${hasRadius ? 'r' : 'u'}`,
+				this.pickPipeline,
+				`points-picking-${hasRadius ? 'r' : 'u'}`,
+				1,
+				0,
+				entries
+			)
 
 		// 3. Dispatch
 		const pass = encoder.beginComputePass()

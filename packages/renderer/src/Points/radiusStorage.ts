@@ -17,7 +17,9 @@ class RadiusStorage extends Storage {
 	constructor(props: IProps) {
 		const hasRealData = !!props.data
 		// 确保数据大小是 4 的倍数（WebGPU writeBuffer 要求）
-		const radiusData = hasRealData ? RadiusStorage.ensureAligned(props.data!) : new Uint8Array(4)
+		const radiusData = hasRealData
+			? RadiusStorage.ensureAligned(props.data!)
+			: new Uint8Array(4)
 		super({ id: props.id, name: 'radius', value: radiusData })
 		this._hasRealData = hasRealData
 		if (props.total && props.data && props.data.length < props.total) {

@@ -174,11 +174,11 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		const renderer = this.map.renderer.webgpuRenderer
 		if (!renderer) return []
 
-		// 转换半径：像素 -> 世界坐标单位
 		const resolution = this.map.view.getResolution()
-		const worldRadius = this.style.radius * resolution
 
-		const indices = await this.points.pick(renderer, x, y, worldRadius)
+		const s = performance.now()
+		const indices = await this.points.pick(renderer, x, y, resolution)
+		console.log(`pick ${indices.length} points in ${performance.now() - s}ms`)
 		const pickedData: Data = []
 		for (const index of indices) {
 			if (this.inputData[index]) {

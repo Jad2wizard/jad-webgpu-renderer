@@ -77,6 +77,95 @@ export class WebGPUBindGroupManager {
 	}
 
 	/**
+	 * 创建单个 BindGroup (通用方法)
+	 * @param label 标签
+	 * @param pipeline 管线
+	 * @param pipelineId 管线ID
+	 * @param pipelineVersion 管线版本
+	 * @param groupIndex 绑定组索引
+	 * @param entries 绑定条目列表
+	 */
+	createBindGroup(
+		label: string,
+		pipeline: GPURenderPipeline | GPUComputePipeline,
+		pipelineId: string,
+		pipelineVersion: number,
+		groupIndex: number,
+		entries: {
+			binding: number
+			resource: GPUBuffer | GPUTexture
+			offset?: number
+			size?: number
+		}[]
+	): GPUBindGroup {
+		const layout = pipeline.getBindGroupLayout(groupIndex)
+
+		const pendingEntries: {
+			binding: number
+			resource: GPUBindingResource
+			cacheId: string
+		}[] = []
+
+		for (const entry of entries) {
+			const { binding, resource, offset = 0, size } = entry
+
+			let cacheId = ''
+			let gpuResource: GPUBindingResource
+
+			if (resource instanceof GPUBuffer) {
+				const id = this.getResourceId(resource)
+				// 如果未指定 size，则使用整个 buffer 大小减去 offset
+				// 注意：这里简单取 resource.size 可能不准确（因为 createBindGroup 允许不传 size 表示剩余全部）
+				// 但为了 cacheKey 唯一性，我们需要确定一个值。
+				// 如果 size 为 undefined，在 GPUBindGroupEntry 中也不传 size。
+				// CacheKey 中可以用 'rest' 或类似标记，或者如果 resource.size 可靠就用它。
+				// WebGPU spec: if size is missing, use buffer.size - offset.
+				const effectiveSize = size !== undefined ? size : resource.size - offset
+				cacheId = `B:${id}@${offset}-${effectiveSize}`
+
+				gpuResource = { buffer: resource, offset }
+				if (size !== undefined) {
+					// @ts-ignore
+					gpuResource.size = size
+				}
+			} else {
+				const id = this.getResourceId(resource)
+				cacheId = `T:${id}`
+				gpuResource = resource.createView()
+			}
+
+			pendingEntries.push({
+				binding,
+				resource: gpuResource,
+				cacheId,
+			})
+		}
+
+		// 按 binding 排序以确保 Key 的唯一性
+		pendingEntries.sort((a, b) => a.binding - b.binding)
+
+		const cacheKey =
+			`${pipelineId}-v${pipelineVersion}-g${groupIndex}|` +
+			pendingEntries.map((e) => `${e.binding}=${e.cacheId}`).join('|')
+
+		let bindGroup = this.bindGroupCache.get(cacheKey)
+		if (!bindGroup) {
+			const descriptor: GPUBindGroupDescriptor = {
+				label: `${label}-BindGroup-${groupIndex}`,
+				layout,
+				entries: pendingEntries.map((e) => ({
+					binding: e.binding,
+					resource: e.resource,
+				})),
+			}
+			bindGroup = this.device.createBindGroup(descriptor)
+			this.bindGroupCache.set(cacheKey, bindGroup)
+		}
+
+		return bindGroup
+	}
+
+	/**
 	 * 为材质创建 BindGroups
 	 * @param pipeline 渲染管线
 	 * @param uniforms Uniform 变量映射

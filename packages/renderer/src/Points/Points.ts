@@ -2,7 +2,7 @@ import Geometry from '../geometry/geometry'
 import Attribute from '../geometry/attribute'
 import { BufferType } from '../backend/Buffer'
 import PointMaterial from './pointMaterial'
-import { computeShader } from '../material/shaders/pointsCompute'
+import { getComputeShader } from '../material/shaders/pointsCompute'
 import Model from '../Model'
 import { Blending, Color, IPlayable } from '../types'
 import { deepMerge, packUint8ToUint32 } from '../utils'
@@ -102,7 +102,7 @@ class Points extends Model implements IPlayable {
 		]
 	}
 
-	private getRadiusStorage() {
+	public getRadiusStorage() {
 		return this.material.getStorage('radius') as RadiusStorage
 	}
 
@@ -348,13 +348,15 @@ class Points extends Model implements IPlayable {
 		renderer: Renderer,
 		x: number,
 		y: number,
-		radius: number = 5
+		resolution: number
 	): Promise<number[]> {
 		const device = renderer.device
 		const backend = renderer.webgpuBackend
+		const hasRadius = this.material.hasRadiusAttribute
+		const computeShaderCode = getComputeShader(hasRadius)
 
 		if (!this.pickUniform || !this.pickResultStorage) {
-			const defs = makeShaderDataDefinitions(computeShader)
+			const defs = makeShaderDataDefinitions(computeShaderCode)
 
 			if (!this.pickUniform) {
 				this.pickUniform = new Uniform({
@@ -363,7 +365,8 @@ class Points extends Model implements IPlayable {
 					def: defs.uniforms['params'],
 					value: {
 						targetPos: [x, y],
-						radiusSq: radius * radius,
+						defaultPointRadius: this._style.radius || 0,
+						resolution,
 						total: this.total,
 					},
 				})
@@ -385,7 +388,8 @@ class Points extends Model implements IPlayable {
 
 		this.pickUniform.updateValue({
 			targetPos: [x, y],
-			radiusSq: radius * radius,
+			defaultPointRadius: this._style.radius || 0,
+			resolution,
 			total: this.total,
 		})
 		this.pickUniform.updateBuffer(backend)
