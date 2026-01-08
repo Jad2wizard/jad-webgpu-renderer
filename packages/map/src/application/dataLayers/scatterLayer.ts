@@ -52,6 +52,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 	private map?: GMap
 	private updateToken = 0
 	private indexTree: PointsIndexTree
+	private currentCount = 0
 
 	constructor(props: IBaseLayerProps & IProps) {
 		super(props)
@@ -63,6 +64,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		this.style = _.merge(this.style, props.style)
 		this.inputData = []
 		this.indexTree = new PointsIndexTree()
+		this.currentCount = 0
 	}
 
 	setSelected(selected: boolean) {
@@ -90,6 +92,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 
 		this.clearAll()
 		this.inputData = []
+		this.currentCount = 0
 
 		const total = Math.min(this.total ?? data.length, data.length)
 		let current = 0
@@ -97,82 +100,200 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 			if (this.updateToken !== token) return false
 
 			const chunk = data.slice(current, current + Math.min(total - current, this.step))
-			await this.appendData(chunk)
+			await this.appendData(chunk, false)
 			current += this.step
 			await delay(50)
 		}
+
+		this.rebuild()
 		return true
 	}
 
-	async appendData(data: Data) {
+	async appendData(data: Data, update = true) {
 		if (data.length === 0) return true
 		if (!this.map) return false
 
 		const { positions, startTimes, colors, radiuses, extent } = this.parseData(data)
-
 		this.updateExtent(extent)
 
+		const newCount = data.length
+		const totalCount = this.currentCount + newCount
+
+		let combinedPositions: Float32Array
+		let combinedColors: Uint8Array | undefined
+		let combinedRadiuses: Uint8Array | undefined
+		let combinedStartTimes: Float32Array | undefined
+
+		// Merge with existing data in Points (if any)
+		if (this.points) {
+			const curPositions = this.points.getAttribute('position') as Float32Array
+			const curColors = this.points.getAttribute('color') as Uint8Array
+			const curStartTimes = this.points.getAttribute('startTime') as Float32Array
+			const curRadiuses = this.points.getRadiusStorage().value as Uint8Array
+
+			combinedPositions = new Float32Array(totalCount * 2)
+			if (curPositions) combinedPositions.set(curPositions)
+			combinedPositions.set(positions, this.currentCount * 2)
+
+			if (colors || curColors) {
+				combinedColors = new Uint8Array(totalCount * 4)
+				if (curColors) combinedColors.set(curColors)
+				if (colors) {
+					combinedColors.set(colors, this.currentCount * 4)
+				} else if (curColors) {
+					// Fill new part with default color
+					const defaultColor = new Uint8Array([
+						this.style.color[0] * 255,
+						this.style.color[1] * 255,
+						this.style.color[2] * 255,
+						this.style.color[3] * 255,
+					])
+					for (let i = 0; i < newCount; i++) {
+						combinedColors.set(defaultColor, (this.currentCount + i) * 4)
+					}
+				}
+			}
+
+			if (radiuses || (curRadiuses && curRadiuses.length > 0)) {
+				combinedRadiuses = new Uint8Array(totalCount)
+				if (curRadiuses) combinedRadiuses.set(curRadiuses.subarray(0, this.currentCount))
+				if (radiuses) {
+					combinedRadiuses.set(radiuses, this.currentCount)
+				} else {
+					combinedRadiuses.fill(this.style.radius, this.currentCount)
+				}
+			}
+
+			if (startTimes || curStartTimes) {
+				combinedStartTimes = new Float32Array(totalCount)
+				if (curStartTimes) combinedStartTimes.set(curStartTimes)
+				if (startTimes) combinedStartTimes.set(startTimes, this.currentCount)
+			}
+		} else {
+			combinedPositions = positions
+			combinedColors = colors
+			combinedRadiuses = radiuses
+			combinedStartTimes = startTimes
+		}
+
+		this.currentCount = totalCount
+		for (let item of data) this.inputData.push(item)
+
+		// Linear index array for sequential rendering of current (unsorted) data
+		const indexArray = new Uint32Array(this.currentCount)
+		for (let i = 0; i < this.currentCount; i++) indexArray[i] = i
+
+		// Create or Update Points model with combined (unsorted) data immediately
 		if (!this.points) {
 			this.points = new Points({
 				id: this.id,
-				position: positions,
-				startTime: startTimes,
-				color: colors,
-				radius: radiuses,
+				position: combinedPositions,
+				index: indexArray,
+				startTime: combinedStartTimes,
+				color: combinedColors,
+				radius: combinedRadiuses,
 				style: {
 					color: this.style.color,
 					radius: this.style.radius,
 					blending: this.style.blending,
 				},
+				total: this.currentCount,
 			})
 			this.scene.addModel(this.points)
 		} else {
-			this.points.appendPoints({
-				position: positions,
-				startTime: startTimes,
-				color: colors,
-				radius: radiuses,
-			})
+			this.points.setTotal(this.currentCount)
+			this.points.updateAttribute('position', combinedPositions)
+			if (combinedColors) this.points.updateAttribute('color', combinedColors)
+			if (combinedRadiuses) this.points.getRadiusStorage().updateValue(combinedRadiuses)
+			if (combinedStartTimes) this.points.updateAttribute('startTime', combinedStartTimes)
+
+			this.points.geometry.setIndex(indexArray)
 		}
-		for (let item of data) this.inputData.push(item)
 
 		this.map.checkAutoFit()
 
-		// Rebuild KDTree
-		if (this.points) {
-			this.indexTree.rebuild(
-				this.points,
-				this.style.radius,
-				this.getRadius
-					? (i) => {
-							// We don't have direct access to row data by index efficiently here without keeping it around or passing it.
-							// But we have radiusStorage in Points which is what rebuild uses.
-							// rebuild method in PointsIndexTree accepts getRadius as (index) => number.
-							// We need to implement logic inside PointsIndexTree to use radiusStorage directly if possible,
-							// or pass a callback that queries radiusStorage.
-							// The previous implementation used radiusStorage.getPointRadius(i).
-							return 0 // This callback is actually for optimization logic inside rebuild.
-							// Let's refactor rebuild to not need this callback if it can access radiusStorage from points.
-						}
-					: undefined
-			)
-			// Actually let's simplify rebuild signature in next step or use what we wrote.
-			// PointsIndexTree.rebuild(points, defaultRadius, getRadius?)
-			// If getRadius is provided, it updates maxRadius.
-
-			// We can just pass a function that delegates to points.getRadiusStorage().getPointRadius(i)
-			this.indexTree.rebuild(
-				this.points,
-				this.style.radius,
-				this.getRadius
-					? (i) => {
-							return this.points!.getRadiusStorage().getPointRadius(i) ?? 0
-						}
-					: undefined
-			)
+		if (update) {
+			this.rebuild()
 		}
 
 		return true
+	}
+
+	private rebuild() {
+		if (!this.points || this.currentCount === 0) return
+
+		// Retrieve current attributes (which might be a mix of sorted and new unsorted data)
+		const currentPositions = this.points.getAttribute('position') as Float32Array
+		const currentColors = this.points.getAttribute('color') as Uint8Array
+		const currentRadiuses = this.points.getRadiusStorage().value as Uint8Array
+		const currentStartTimes = this.points.getAttribute('startTime') as Float32Array
+
+		// Rebuild Tree with current data
+		this.indexTree.rebuildFromData(
+			currentPositions,
+			this.currentCount,
+			this.style.radius,
+			this.getRadius
+				? (i) => {
+						if (currentRadiuses) return currentRadiuses[i]
+						return 0
+					}
+				: undefined
+		)
+
+		const tree = this.indexTree.getTree()
+		if (!tree) return
+
+		const sortedPositions = tree.points.data // TypedArray (Sorted)
+		const ids = tree.ids // Int32Array (Permutation indices)
+
+		// Sort attributes based on new tree ids
+		let sortedColors: Uint8Array | undefined
+		if (currentColors) {
+			sortedColors = new Uint8Array(this.currentCount * 4)
+			for (let i = 0; i < this.currentCount; i++) {
+				const originalIndex = ids[i]
+				sortedColors[i * 4 + 0] = currentColors[originalIndex * 4 + 0]
+				sortedColors[i * 4 + 1] = currentColors[originalIndex * 4 + 1]
+				sortedColors[i * 4 + 2] = currentColors[originalIndex * 4 + 2]
+				sortedColors[i * 4 + 3] = currentColors[originalIndex * 4 + 3]
+			}
+		}
+
+		let sortedRadiuses: Uint8Array | undefined
+		if (currentRadiuses) {
+			// Ensure alignment to 4 bytes for WebGPU
+			const alignedSize = Math.ceil(this.currentCount / 4) * 4
+			sortedRadiuses = new Uint8Array(alignedSize)
+			for (let i = 0; i < this.currentCount; i++) {
+				const originalIndex = ids[i]
+				sortedRadiuses[i] = currentRadiuses[originalIndex]
+			}
+		}
+
+		let sortedStartTimes: Float32Array | undefined
+		if (currentStartTimes) {
+			sortedStartTimes = new Float32Array(this.currentCount)
+			for (let i = 0; i < this.currentCount; i++) {
+				const originalIndex = ids[i]
+				sortedStartTimes[i] = currentStartTimes[originalIndex]
+			}
+		}
+
+		// Update Points model with SORTED attributes
+		this.points.updateAttribute('position', sortedPositions)
+		if (sortedColors) this.points.updateAttribute('color', sortedColors)
+		if (sortedRadiuses) this.points.getRadiusStorage().updateValue(sortedRadiuses)
+		if (sortedStartTimes) this.points.updateAttribute('startTime', sortedStartTimes)
+
+		// Permute inputData to match the sorted order
+		const oldInputData = new Array(this.currentCount)
+		for (let i = 0; i < this.currentCount; i++) {
+			oldInputData[i] = this.inputData[ids[i]]
+		}
+		for (let i = 0; i < this.currentCount; i++) {
+			this.inputData[i] = oldInputData[i]
+		}
 	}
 
 	// 更新pointIndices 中的散点样式，或直接设置 uniform 样式

@@ -20,6 +20,7 @@ const defaultStyle = {
 type IProps = {
 	id: string
 	position: Float32Array
+	index?: Uint32Array
 	radius?: Uint8Array
 	color?: Uint8Array
 	startTime?: Float32Array
@@ -69,6 +70,9 @@ class Points extends Model implements IPlayable {
 		this._style = style
 		this._total = total
 		this.initAttributes(props)
+		if (props.index) {
+			this.geometry.setIndex(props.index)
+		}
 		this._playable = !!props.startTime
 	}
 

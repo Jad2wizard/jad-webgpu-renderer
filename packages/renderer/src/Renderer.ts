@@ -28,6 +28,9 @@ class Renderer {
 	private _canvas: HTMLCanvasElement
 	private _clearColor: Color = [0, 0, 0, 0] as Color
 	private _antialias: boolean = false
+	private _lastTime: number = 0
+	private _frameCount: number = 0
+	private _fps: number = 0
 
 	private constructor(props: IProps) {
 		this._canvas = props.canvas
@@ -67,6 +70,19 @@ class Renderer {
 		} catch (e) {
 			instance.ready = false
 			throw 'WebGPU initialization failed' + e
+		}
+	}
+
+	public getPerformanceInfo() {
+		return {
+			fps: this._fps,
+			memory: (performance as any).memory
+				? {
+						usedJSHeapSize: (performance as any).memory.usedJSHeapSize,
+						totalJSHeapSize: (performance as any).memory.totalJSHeapSize,
+						jsHeapSizeLimit: (performance as any).memory.jsHeapSizeLimit,
+					}
+				: undefined,
 		}
 	}
 
@@ -138,6 +154,14 @@ class Renderer {
 	 * @param scene
 	 */
 	public render(scene: Scene, camera: Camera) {
+		const now = performance.now()
+		this._frameCount++
+		if (now - this._lastTime >= 1000) {
+			this._fps = Math.round((this._frameCount * 1000) / (now - this._lastTime))
+			this._frameCount = 0
+			this._lastTime = now
+		}
+
 		if (!this.ready) {
 			throw new Error('Renderer not initialized. Call create() first')
 		}
