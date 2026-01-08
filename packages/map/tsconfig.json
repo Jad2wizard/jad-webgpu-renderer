@@ -5,6 +5,7 @@
 		"declarationDir": "./typings",
 		"esModuleInterop": true,
 		"allowSyntheticDefaultImports": true,
+		"allowJs": true,
 		"baseUrl": ".",
 		"paths": {
 			"@map/*": ["src/*"],

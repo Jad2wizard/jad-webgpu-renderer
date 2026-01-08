@@ -25,11 +25,20 @@
 	"dependencies": {
 		"@types/proj4": "2.5",
 		"@webgpu-gmap/renderer": "*",
+		"bit-twiddle": "^1.0.2",
+		"buffer": "^6.0.3",
 		"eventemitter3": "^5.0.1",
+		"inorder-tree-layout": "^1.0.0",
+		"ndarray": "^1.0.19",
+		"ndarray-ops": "^1.2.2",
+		"ndarray-pack": "^1.2.1",
+		"ndarray-scratch": "^1.2.0",
+		"ndarray-select": "^1.0.1",
 		"ol": "^6.15.1",
 		"proj4": "2.9",
 		"react": "18.2",
-		"react-dom": "18.2"
+		"react-dom": "18.2",
+		"typedarray-pool": "^1.2.0"
 	},
 	"devDependencies": {
 		"@types/node": "^24.10.1",

@@ -12,6 +12,9 @@ module.exports = {
 	resolve: {
 		extensions: ['.tsx', '.ts', '.js'],
 		plugins: [new TsconfigPathsPlugin()],
+		fallback: {
+			buffer: require.resolve('buffer/'),
+		},
 	},
 	module: {
 		rules: [

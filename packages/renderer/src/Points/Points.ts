@@ -2,7 +2,6 @@ import Geometry from '../geometry/geometry'
 import Attribute from '../geometry/attribute'
 import { BufferType } from '../backend/Buffer'
 import PointMaterial from './pointMaterial'
-import { getComputeShader } from '../material/shaders/pointsCompute'
 import Model from '../Model'
 import { Blending, Color, IPlayable } from '../types'
 import { deepMerge, packUint8ToUint32 } from '../utils'
@@ -36,14 +35,9 @@ import Storage from '../material/storage'
 import Uniform from '../material/uniform'
 import { makeShaderDataDefinitions } from 'webgpu-utils'
 
-import { PointsPickPass } from './PointsPickPass'
-
 class Points extends Model implements IPlayable {
 	private _playable = false
 	private _total: number
-	private pickUniform: Uniform | undefined
-	private pickResultStorage: Storage | undefined
-	private pickPass: PointsPickPass | undefined
 
 	/**
 	 * position 为散点坐标数组长度为2 * total，radius 为散点大小数组长度为2 * total，color 为散点颜色数组长度为4 * total（color的四个分量取值范围为0到1）
@@ -276,16 +270,15 @@ class Points extends Model implements IPlayable {
 	}
 
 	public getPickUniform() {
-		return this.pickUniform
+		return undefined
 	}
 
 	public getPickResultStorage() {
-		return this.pickResultStorage
+		return undefined
 	}
 
 	private reallocate() {
 		console.log('reallocating')
-		this.pickPass?.resetBindGroup()
 		for (let attr of this.geometry.getAttributes()) {
 			attr.reallocate(this.total * attr.itemSize)
 		}
@@ -344,105 +337,8 @@ class Points extends Model implements IPlayable {
 		this.material.updateUniform('currentTime', time)
 	}
 
-	public async pick(
-		renderer: Renderer,
-		x: number,
-		y: number,
-		resolution: number
-	): Promise<number[]> {
-		const device = renderer.device
-		const backend = renderer.webgpuBackend
-		const hasRadius = this.material.hasRadiusAttribute
-		const computeShaderCode = getComputeShader(hasRadius)
-
-		if (!this.pickUniform || !this.pickResultStorage) {
-			const defs = makeShaderDataDefinitions(computeShaderCode)
-
-			if (!this.pickUniform) {
-				this.pickUniform = new Uniform({
-					id: 'pick-uniform',
-					name: 'params',
-					def: defs.uniforms['params'],
-					value: {
-						targetPos: [x, y],
-						defaultPointRadius: this._style.radius || 0,
-						resolution,
-						total: this.total,
-					},
-				})
-			}
-
-			if (!this.pickResultStorage) {
-				this.pickResultStorage = new Storage({
-					id: 'pick-result',
-					name: 'result',
-					def: defs.storages['result'],
-					value: {
-						count: 0,
-						indices: new Uint32Array(1024),
-					},
-				})
-				this.pickResultStorage.usage = BufferType.READ_WRITE_STORAGE
-			}
-		}
-
-		this.pickUniform.updateValue({
-			targetPos: [x, y],
-			defaultPointRadius: this._style.radius || 0,
-			resolution,
-			total: this.total,
-		})
-		this.pickUniform.updateBuffer(backend)
-
-		this.pickResultStorage.updateValue({
-			count: 0,
-			indices: new Uint32Array(1024),
-		})
-		this.pickResultStorage.updateBuffer(backend)
-
-		if (!this.pickPass) {
-			this.pickPass = new PointsPickPass(this)
-		}
-
-		const commandEncoder = device.createCommandEncoder()
-		this.pickPass.execute(renderer, commandEncoder)
-
-		const resultSize = 4 + 1024 * 4
-		const readBuffer = device.createBuffer({
-			size: resultSize,
-			usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-		})
-
-		const resultGPUBuffer = this.pickResultStorage.buffer?.GPUBuffer
-		if (!resultGPUBuffer) return []
-
-		commandEncoder.copyBufferToBuffer(resultGPUBuffer, 0, readBuffer, 0, resultSize)
-		device.queue.submit([commandEncoder.finish()])
-
-		await readBuffer.mapAsync(GPUMapMode.READ)
-		const resultData = new Uint32Array(readBuffer.getMappedRange())
-		const count = resultData[0]
-		const indices: number[] = []
-		for (let i = 0; i < Math.min(count, 1024); i++) {
-			indices.push(resultData[i + 1])
-		}
-		readBuffer.unmap()
-		readBuffer.destroy()
-
-		return indices
-	}
-
 	public dispose() {
 		super.dispose()
-		if (this.pickUniform) {
-			this.pickUniform.dispose()
-			this.pickUniform = undefined
-		}
-		if (this.pickResultStorage) {
-			this.pickResultStorage.dispose()
-			this.pickResultStorage = undefined
-		}
-		this.pickPass = undefined
 	}
 }
 

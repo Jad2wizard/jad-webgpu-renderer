@@ -4,6 +4,7 @@ import { Points } from '@webgpu-gmap/renderer'
 import { Color, Blending } from '@map/types'
 import { delay, parsePositionsAndExtent } from '@map/utils'
 import GMap from '..'
+import { PointsIndexTree } from '../indexTree/pointsIndexTree'
 
 type FieldsType = LabelFields & {
 	lon: number
@@ -50,6 +51,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 	private inputData: Data
 	private map?: GMap
 	private updateToken = 0
+	private indexTree: PointsIndexTree
 
 	constructor(props: IBaseLayerProps & IProps) {
 		super(props)
@@ -60,6 +62,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		this.fields = props.fields
 		this.style = _.merge(this.style, props.style)
 		this.inputData = []
+		this.indexTree = new PointsIndexTree()
 	}
 
 	setSelected(selected: boolean) {
@@ -135,6 +138,40 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 
 		this.map.checkAutoFit()
 
+		// Rebuild KDTree
+		if (this.points) {
+			this.indexTree.rebuild(
+				this.points,
+				this.style.radius,
+				this.getRadius
+					? (i) => {
+							// We don't have direct access to row data by index efficiently here without keeping it around or passing it.
+							// But we have radiusStorage in Points which is what rebuild uses.
+							// rebuild method in PointsIndexTree accepts getRadius as (index) => number.
+							// We need to implement logic inside PointsIndexTree to use radiusStorage directly if possible,
+							// or pass a callback that queries radiusStorage.
+							// The previous implementation used radiusStorage.getPointRadius(i).
+							return 0 // This callback is actually for optimization logic inside rebuild.
+							// Let's refactor rebuild to not need this callback if it can access radiusStorage from points.
+						}
+					: undefined
+			)
+			// Actually let's simplify rebuild signature in next step or use what we wrote.
+			// PointsIndexTree.rebuild(points, defaultRadius, getRadius?)
+			// If getRadius is provided, it updates maxRadius.
+
+			// We can just pass a function that delegates to points.getRadiusStorage().getPointRadius(i)
+			this.indexTree.rebuild(
+				this.points,
+				this.style.radius,
+				this.getRadius
+					? (i) => {
+							return this.points!.getRadiusStorage().getPointRadius(i) ?? 0
+						}
+					: undefined
+			)
+		}
+
 		return true
 	}
 
@@ -171,13 +208,11 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 	async pick(x: number, y: number): Promise<Data> {
 		if (!this.points || !this.map) return []
 
-		const renderer = this.map.renderer.webgpuRenderer
-		if (!renderer) return []
-
 		const resolution = this.map.view.getResolution()
-
 		const s = performance.now()
-		const indices = await this.points.pick(renderer, x, y, resolution)
+
+		const indices = this.indexTree.query(x, y, resolution, this.points, this.style.radius)
+
 		console.log(`pick ${indices.length} points in ${performance.now() - s}ms`)
 		const pickedData: Data = []
 		for (const index of indices) {
