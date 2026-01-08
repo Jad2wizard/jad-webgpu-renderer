@@ -161,7 +161,7 @@ const Demo = () => {
 			gmapRef.current.view.setCenter([116.4, 39.9])
 			gmapRef.current.view.setZoom(10) // Zoom in a bit
 
-			const { heatmapData, pathsData, scatterData } = generateDemoData(200000)
+			const { heatmapData, pathsData, scatterData } = generateDemoData(100)
 
 			// 1. Heatmap Layer
 			// const heatmapLayer = gmapRef.current.addLayer('heatmap-layer', 'heatmap', {
@@ -250,6 +250,8 @@ const Demo = () => {
 			})
 			scatterLayer.updateData(scatterData)
 			scatterLayer.setLevel(0)
+			//@ts-ignore
+			window.s = scatterLayer
 
 			// Animation Loop
 			let start = 0

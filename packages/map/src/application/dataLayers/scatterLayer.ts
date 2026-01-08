@@ -211,6 +211,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		const resolution = this.map.view.getResolution()
 		const s = performance.now()
 
+		console.log(`x: ${x}, y: ${y}, resolution: ${resolution}, radius: ${this.style.radius}`)
 		const indices = this.indexTree.query(x, y, resolution, this.points, this.style.radius)
 
 		console.log(`pick ${indices.length} points in ${performance.now() - s}ms`)
