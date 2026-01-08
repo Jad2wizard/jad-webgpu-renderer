@@ -105,7 +105,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 			await delay(50)
 		}
 
-		this.rebuild()
+		// this.rebuild()
 		return true
 	}
 
@@ -244,7 +244,11 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		const tree = this.indexTree.getTree()
 		if (!tree) return
 
-		const sortedPositions = tree.points.data // TypedArray (Sorted)
+		// tree.points.data is Float64Array (from static-kdtree), convert to Float32Array for WebGPU
+		// use subarray to ensure we only get the valid data (as the underlying buffer might be from a pool and larger)
+		const sortedPositions = new Float32Array(
+			tree.points.data.subarray(0, this.currentCount * 2)
+		)
 		const ids = tree.ids // Int32Array (Permutation indices)
 
 		// Sort attributes based on new tree ids
@@ -293,6 +297,13 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		}
 		for (let i = 0; i < this.currentCount; i++) {
 			this.inputData[i] = oldInputData[i]
+		}
+
+		// Reset tree.ids to identity mapping because all data (attributes and inputData)
+		// has been reordered to match the tree's sorted order.
+		// This ensures that query results (indices) match the sorted data.
+		for (let i = 0; i < this.currentCount; i++) {
+			ids[i] = i
 		}
 	}
 
