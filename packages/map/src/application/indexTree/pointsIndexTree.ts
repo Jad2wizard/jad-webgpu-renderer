@@ -1,10 +1,15 @@
 import createKDTree from './kdtree'
 import { Points } from '@webgpu-gmap/renderer'
-// @ts-ignore
+// @ts-expect-error ndarray has no bundled types here
 import ndarray from 'ndarray'
 
+type KDTreeLike = {
+	range(lo: number[], hi: number[], visit: (index: number) => void): void
+	dispose(): void
+}
+
 export class PointsIndexTree {
-	private tree: any
+	private tree?: KDTreeLike
 	private _maxPointRadius: number = 0
 
 	constructor() {}
@@ -22,14 +27,11 @@ export class PointsIndexTree {
 		this.dispose()
 		if (!positions || count === 0) return
 
-		// Use Float32Array directly for ndarray
 		const points = ndarray(positions.subarray(0, count * 2), [count, 2])
-		this.tree = createKDTree(points)
+		this.tree = createKDTree(points) as unknown as KDTreeLike
 
-		// Update max radius
 		let maxR = defaultRadius || 0
 
-		// Optimization: only if we have custom radii
 		if (getRadius) {
 			for (let i = 0; i < count; i++) {
 				const r = getRadius(i)
@@ -51,18 +53,15 @@ export class PointsIndexTree {
 		if (positionAttr && positionAttr.array) {
 			const positions = positionAttr.array
 			const count = points.geometry.instanceCount
-			const pointsArray: any[] = []
+			const pointsArray: Array<[number, number]> = []
 			for (let i = 0; i < count; i++) {
 				pointsArray.push([positions[i * 2], positions[i * 2 + 1]])
 			}
-			this.tree = createKDTree(pointsArray)
+			this.tree = createKDTree(pointsArray) as unknown as KDTreeLike
 
-			// Update max radius
 			let maxR = defaultRadius || 0
 
-			// Optimization: only if we have custom radii
 			if (getRadius) {
-				// We can iterate over all points and check radius
 				for (let i = 0; i < count; i++) {
 					const r = radiusStorage.getPointRadius(i)
 					if (r !== undefined && r > maxR) {
@@ -83,21 +82,13 @@ export class PointsIndexTree {
 	): number[] {
 		if (!this.tree || !points) return []
 
-		// Thresholds in world units
-		// Condition: dist < 3px OR dist < pointRadius
-		// We need to query a range that covers the maximum possible influence.
-		// Influence = max(3px, maxPointRadius)
-		const thresholdPx = 3
-		// Max radius of any point in the dataset (or style default)
+		const thresholdPx = 3 //设置的最小搜索半径
 		const maxRPx = Math.max(defaultRadius || 0, this._maxPointRadius)
 
-		// Search radius in pixels (safe upper bound)
 		const searchRadiusPx = Math.max(thresholdPx, maxRPx)
 
-		// Convert to world units
 		const searchRadiusWorld = searchRadiusPx * resolution
 
-		// Range query box: [minX, minY, maxX, maxY]
 		const range = [
 			x - searchRadiusWorld,
 			y - searchRadiusWorld,
@@ -111,7 +102,6 @@ export class PointsIndexTree {
 		const radiusStorage = points.getRadiusStorage()
 		const styleRadius = defaultRadius || 0
 
-		// Perform range search
 		this.tree.range([range[0], range[1]], [range[2], range[3]], (index: number) => {
 			if (!positions) return
 
@@ -119,21 +109,17 @@ export class PointsIndexTree {
 			const py = positions[index * 2 + 1]
 			const dx = px - x
 			const dy = py - y
-			const distSq = dx * dx + dy * dy // World distance squared
+			const distSq = dx * dx + dy * dy
 
-			// Get point radius
 			let pointRadius = styleRadius
 			if (radiusStorage.hasData) {
 				const r = radiusStorage.getPointRadius(index)
 				if (r !== undefined) pointRadius = r
 			}
 
-			// Thresholds in world units squared
 			const toleranceWorld = 3.0 * resolution
 			const radiusWorld = pointRadius * resolution
-			console.log(radiusWorld)
 
-			// Selection Logic
 			if (distSq < toleranceWorld * toleranceWorld || distSq < radiusWorld * radiusWorld) {
 				indices.push(index)
 			}

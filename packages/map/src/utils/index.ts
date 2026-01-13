@@ -1,6 +1,6 @@
 import { Color, Extent } from '@map/types'
 
-export const delay = (duration = 1000) => new Promise(resolve => setTimeout(resolve, duration))
+export const delay = (duration = 1000) => new Promise((resolve) => setTimeout(resolve, duration))
 
 export const isSameColor = (c1: Color, c2: Color) => {
 	return c1.every((c, i) => c2[i])
@@ -10,7 +10,7 @@ export const isSameColor = (c1: Color, c2: Color) => {
 export interface ParsedData {
 	positions: Float32Array
 	extent: Extent
-	// 可以根据需要扩展其他字段，但 positions 和 extent 是最基础的
+	//  其它扩展字段
 	[key: string]: any
 }
 
