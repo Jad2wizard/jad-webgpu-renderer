@@ -22,3 +22,28 @@
 
 3. **WASM 优化**:
     - 预留用于记录使用 WebAssembly 实现后的性能数据。
+
+## 2. 拾取性能对比 (Compute Shader vs Static KDTree)
+
+对比两种拾取方案在不同数据量下的性能表现：
+1. **Compute Shader**: 基于 GPU 并行计算的拾取方案。
+2. **Static KDTree**: 基于 CPU 构建静态 KDTree 的拾取方案（利用 `typedarray-pool` 复用内存）。
+
+### 10万散点 (100k points)
+
+| 指标 (Metric)    | Compute Shader | Static KDTree | 备注 (Note) |
+| :--------------- | :------------- | :------------ | :---------- |
+| 拾取耗时(ms)     | 319.28         | 2.68          |             |
+| JS Heap Size(MB) | 93.87          | 92.89         |             |
+
+### 100万散点 (1m points)
+
+| 指标 (Metric)    | Compute Shader | Static KDTree | 备注 (Note) |
+| :--------------- | :------------- | :------------ | :---------- |
+| 拾取耗时(ms)     | 3260.12        | 9.34          |             |
+| JS Heap Size(MB) | 234.65         | 414.08        |             |
+
+### 总结 / Summary
+
+1. kdtree 的检索速度远优于受 CPU-GPU 通信延迟影响的 Compute Shader 方案。
+2. 因为构建空间索引树需要所有点的坐标数据，所以 kdtree 所占用的内存空间更多

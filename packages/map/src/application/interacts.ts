@@ -102,9 +102,17 @@ class Interacts {
 		const layers = this.map.layerManager.layers
 		for (let layer of layers) {
 			if (layer.pick) {
+				const s = performance.now()
 				const data = await layer.pick(mouseCoord.x, mouseCoord.y)
 				if (data.length > 0) {
-					console.log('Picked data:', data)
+					console.log('Picked points count:', data.length)
+					console.log('Pick time:', performance.now() - s)
+					//@ts-ignore
+					console.log(
+						'used js heap size: ',
+						//@ts-ignore
+						performance.memory.usedJSHeapSize / 1024 ** 2
+					)
 					this.map.handleInteractEvent('click', { ...mouseCoord, data })
 				}
 			}

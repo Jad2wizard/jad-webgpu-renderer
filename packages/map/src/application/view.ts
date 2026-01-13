@@ -42,6 +42,7 @@ class View {
 	private _camera: PerspectiveCamera
 	private plane = new Plane(new Vector3(0, 0, 1), 0)
 	private controls: OrbitControls
+	private fov: number
 
 	private R = 6378137
 	private MAX_LAT = 85.0511287798
@@ -50,9 +51,10 @@ class View {
 		this.width = props.width
 		this.height = props.height
 		this.tileMap = props.tileMap
+		this.fov = this.calcFov(this.height)
 
 		const aspect = this.width / this.height
-		this._camera = new PerspectiveCamera(this.calcFov(this.height), aspect, 1, 10000000)
+		this._camera = new PerspectiveCamera(this.fov, aspect, 1, 10000000)
 		this.controls = this.initCamera(props)
 		this.bindEvents()
 	}
@@ -67,9 +69,8 @@ class View {
 
 	public getZoom() {
 		// 根据相机高度反推 zoom
-		const fov = this.calcFov(this.height)
 		const height = this.camera.position.z
-		const fovRad = (fov * Math.PI) / 180
+		const fovRad = (this.fov * Math.PI) / 180
 		const halfScreenWorldSize = height * Math.tan(fovRad / 2)
 		const resolution = (halfScreenWorldSize * 2) / this.height
 		return Math.log2(INITIAL_RESOLUTION / resolution)
@@ -94,8 +95,7 @@ class View {
 	}
 
 	public setZoom(zoom: number) {
-		const fov = this.calcFov(this.height)
-		const height = calcCameraHeightFromZoom(zoom, this.height, fov)
+		const height = calcCameraHeightFromZoom(zoom, this.height, this.fov)
 		this.camera.position.z = height
 		this.controls.update()
 	}
@@ -107,7 +107,8 @@ class View {
 		const aspect = this.width / this.height
 		this._camera.aspect = aspect
 		// 重新计算FOV以保持合适的视野
-		this._camera.fov = this.calcFov(this.height)
+		this.fov = this.calcFov(this.height)
+		this._camera.fov = this.fov
 		this._camera.updateProjectionMatrix()
 		this.onViewChange()
 	}
@@ -192,8 +193,7 @@ class View {
 		const centerWorld = this.lonlat2World(center[0], center[1])
 
 		const defaultZoom = this.tileMap.view.getZoom() || 7
-		const fov = this.calcFov(this.height)
-		const cameraHeight = calcCameraHeightFromZoom(defaultZoom, this.height, fov)
+		const cameraHeight = calcCameraHeightFromZoom(defaultZoom, this.height, this.fov)
 
 		this.camera.position.set(centerWorld.x, centerWorld.y, cameraHeight)
 		//@ts-ignore

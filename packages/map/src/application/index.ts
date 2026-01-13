@@ -7,6 +7,7 @@ import Interacts from './interacts'
 import { Extent } from '@map/types'
 import LayerManager, { LayerType, LayerProps } from '@map/application/layerManager'
 import '@map/application/dataLayers/scatterLayer'
+import PerformanceWidget from './widgets/PerformanceWidget'
 
 type IProps = {
 	container: HTMLDivElement
@@ -26,6 +27,7 @@ class GMap extends EventEmitter {
 	private _interacts: Interacts
 	private _layerManager = new LayerManager(this)
 	private _container: HTMLDivElement
+	private _performanceWidget: PerformanceWidget
 	private extent: Extent
 	private active = true
 	private resizeObserver?: ResizeObserver
@@ -39,6 +41,7 @@ class GMap extends EventEmitter {
 		this._renderer = new Renderer({ container: this._container, antialias: true })
 		this._tileMap = this.initTileMap({ ...props, extent: this.extent })
 		this._view = this.initView({ ...props, extent: this.extent }, this._renderer.canvas)
+		this._performanceWidget = new PerformanceWidget(this)
 
 		this.extent = props.extent || { ...defaultExtent }
 		this.autoFit = !!props.autoFit
@@ -209,6 +212,7 @@ class GMap extends EventEmitter {
 	}
 
 	dispose() {
+		this._performanceWidget.dispose()
 		this._layerManager.dispose()
 		this.view.dispose()
 		this.removeAllListeners()
