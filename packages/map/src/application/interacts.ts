@@ -105,7 +105,7 @@ class Interacts {
 				const s = performance.now()
 				const data = await layer.pick(mouseCoord.x, mouseCoord.y)
 				if (data.length > 0) {
-					console.log('Picked points count:', data.length)
+					console.log('Picked points :', data)
 					console.log('Pick time:', performance.now() - s)
 					//@ts-ignore
 					console.log(

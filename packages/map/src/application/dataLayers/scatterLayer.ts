@@ -6,6 +6,9 @@ import { delay, parsePositionsAndExtent } from '@map/utils'
 import GMap from '..'
 import { PointsIndexTree } from '../indexTree/pointsIndexTree'
 
+// @ts-ignore
+import * as pool from 'typedarray-pool'
+
 type FieldsType = LabelFields & {
 	lon: number
 	lat: number
@@ -48,11 +51,11 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 	private getColor: IProps['getColor']
 	private getRadius: IProps['getRadius']
 	private total?: number
-	private inputData: Data
 	private map?: GMap
 	private updateToken = 0 // 更新token，用于判断是否需要 执行 updateData 方法更新图层数据
 	private indexTree: PointsIndexTree
 	private currentCount = 0
+	private treeIds?: Int32Array
 
 	constructor(props: IBaseLayerProps & IProps) {
 		super(props)
@@ -62,7 +65,6 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		this.total = props.total
 		this.fields = props.fields
 		this.style = _.merge(this.style, props.style)
-		this.inputData = []
 		this.indexTree = new PointsIndexTree()
 		this.currentCount = 0
 	}
@@ -91,7 +93,6 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		}
 
 		this.clearAll()
-		this.inputData = []
 		this.currentCount = 0
 
 		const total = Math.min(this.total ?? data.length, data.length)
@@ -117,7 +118,6 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		this.updateExtent(extent)
 
 		const newCount = data.length
-		for (const item of data) this.inputData.push(item)
 
 		if (!this.points) {
 			const totalCapacity = this.total ?? this.currentCount + newCount
@@ -174,6 +174,74 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 					}
 				: undefined
 		)
+
+		const tree = this.indexTree.getTree()
+		if (tree) {
+			const sortedPositions = tree.points.data
+			const ids = tree.ids
+			const count = this.currentCount
+
+			// 重用 kdtree.points 作为 position attribute
+			const positionAttr = this.points.geometry.getAttribute('position')
+			if (positionAttr) {
+				positionAttr.array = sortedPositions
+				positionAttr.needsUpdate = true
+				// @ts-ignore
+				positionAttr.capacity = sortedPositions.length / positionAttr.itemSize
+				// 同时更新 Points 的 _total
+				// @ts-ignore
+				this.points._total = count
+			}
+
+			// 根据 kdtree.ids 重排其他属性
+			const colorAttr = this.points.geometry.getAttribute('color')
+			if (colorAttr && colorAttr.array) {
+				const oldColors = colorAttr.array
+				const newColors = new Uint8Array(count * 4)
+				for (let i = 0; i < count; i++) {
+					const id = ids[i]
+					newColors[i * 4 + 0] = oldColors[id * 4 + 0]
+					newColors[i * 4 + 1] = oldColors[id * 4 + 1]
+					newColors[i * 4 + 2] = oldColors[id * 4 + 2]
+					newColors[i * 4 + 3] = oldColors[id * 4 + 3]
+				}
+				colorAttr.array = newColors
+				colorAttr.needsUpdate = true
+				// @ts-ignore
+				colorAttr.capacity = newColors.length / colorAttr.itemSize
+			}
+
+			const startTimeAttr = this.points.geometry.getAttribute('startTime')
+			if (startTimeAttr && startTimeAttr.array) {
+				const oldTimes = startTimeAttr.array
+				const newTimes = new Float32Array(count)
+				for (let i = 0; i < count; i++) {
+					newTimes[i] = oldTimes[ids[i]]
+				}
+				startTimeAttr.array = newTimes
+				startTimeAttr.needsUpdate = true
+				// @ts-ignore
+				startTimeAttr.capacity = newTimes.length / startTimeAttr.itemSize
+			}
+
+			const radiusStorage = this.points.getRadiusStorage()
+			if (radiusStorage.hasData) {
+				const oldRadiuses = radiusStorage.value as Uint8Array
+				const alignedSize = Math.ceil(count / 4) * 4
+				const newRadiuses = new Uint8Array(alignedSize)
+				for (let i = 0; i < count; i++) {
+					newRadiuses[i] = oldRadiuses[ids[i]]
+				}
+				radiusStorage.updateValue(newRadiuses)
+			}
+
+			this.treeIds = ids
+			// 将 kdtree.points与 geometry的 position 共享 buffer，以及重排序其它 attributes 之后
+			// tree.ids 就变成了简单的递增数组，失去了作为kdtree.points原始数据的索引的意义，故删掉
+			pool.freeInt32(tree.ids)
+			// @ts-ignore
+			tree.ids = null
+		}
 	}
 
 	// 更新pointIndices 中的散点样式，或直接设置 uniform 样式
@@ -210,19 +278,20 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		this.map = undefined
 	}
 
-	async pick(x: number, y: number): Promise<Data> {
+	async pick(x: number, y: number): Promise<number[]> {
 		if (!this.points || !this.map) return []
 
 		//获取分辨率，单位是：米/像素
 		const resolution = this.map.view.getResolution()
 		const indices = this.indexTree.query(x, y, resolution, this.points, this.style.radius)
-		const pickedData: Data = []
-		for (const index of indices) {
-			if (this.inputData[index]) {
-				pickedData.push(this.inputData[index])
-			}
+		const pickedIndices: number[] = []
+		if (!this.treeIds) {
+			return []
 		}
-		return pickedData
+		for (const index of indices) {
+			pickedIndices.push(this.treeIds[index])
+		}
+		return pickedIndices
 	}
 
 	private parseData(data: Data) {

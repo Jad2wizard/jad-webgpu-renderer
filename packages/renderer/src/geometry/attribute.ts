@@ -55,6 +55,10 @@ class Attribute {
 		return this._capacity
 	}
 
+	set capacity(v: number) {
+		this._capacity = v
+	}
+
 	set shaderLocation(l: number | undefined) {
 		this._shaderLocation = l
 	}

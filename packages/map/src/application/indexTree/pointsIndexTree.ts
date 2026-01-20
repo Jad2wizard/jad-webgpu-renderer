@@ -6,13 +6,13 @@ import ndarray from 'ndarray'
 type KDTreeLike = {
 	range(lo: number[], hi: number[], visit: (index: number) => void): void
 	dispose(): void
+	points: { data: Float32Array }
+	ids: Int32Array
 }
 
 export class PointsIndexTree {
 	private tree?: KDTreeLike
 	private _maxPointRadius: number = 0
-
-	constructor() {}
 
 	public getTree() {
 		return this.tree
@@ -41,36 +41,6 @@ export class PointsIndexTree {
 			}
 		}
 		this._maxPointRadius = maxR
-	}
-
-	public rebuild(points: Points, defaultRadius: number, getRadius?: (index: number) => number) {
-		this.dispose()
-		if (!points) return
-
-		const positionAttr = points.geometry.getAttribute('position')
-		const radiusStorage = points.getRadiusStorage()
-
-		if (positionAttr && positionAttr.array) {
-			const positions = positionAttr.array
-			const count = points.geometry.instanceCount
-			const pointsArray: Array<[number, number]> = []
-			for (let i = 0; i < count; i++) {
-				pointsArray.push([positions[i * 2], positions[i * 2 + 1]])
-			}
-			this.tree = createKDTree(pointsArray) as unknown as KDTreeLike
-
-			let maxR = defaultRadius || 0
-
-			if (getRadius) {
-				for (let i = 0; i < count; i++) {
-					const r = radiusStorage.getPointRadius(i)
-					if (r !== undefined && r > maxR) {
-						maxR = r
-					}
-				}
-			}
-			this._maxPointRadius = maxR
-		}
 	}
 
 	public query(
