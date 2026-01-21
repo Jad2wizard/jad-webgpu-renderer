@@ -31,10 +31,10 @@
 
 ### 10万散点 (100k points)
 
-| 指标 (Metric)    | Compute Shader | Static KDTree | 备注 (Note) |
-| :--------------- | :------------- | :------------ | :---------- |
-| 拾取耗时(ms)     | 319.28         | 2.68          |             |
-| JS Heap Size(MB) | 93.87          | 92.89         |             |
+| 指标 (Metric)    | Compute Shader | Static KDTree | 备注 (Note)                                |
+| :--------------- | :------------- | :------------ | :----------------------------------------- |
+| 拾取耗时(ms)     | 319.28         | 2.68          |                                            |
+| JS Heap Size(MB) | 93.87          | 92.89         | kdtree和positions 共享 buffer 后变为78.6MB |
 
 ### 100万散点 (1m points)
 
