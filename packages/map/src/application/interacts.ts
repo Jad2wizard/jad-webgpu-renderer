@@ -9,6 +9,7 @@ class Interacts {
 	private mouseCoord: { left: number; top: number; x: number; y: number }
 	private mouseDownCoord: { left: number; top: number; x: number; y: number }
 	private dragging = false
+	private boxSelecting = false
 
 	//以下三个参数用于在 onMouseUp 中判断鼠标点击事件是click 还是 dblclick
 	private firstClickTime = 0
@@ -36,14 +37,25 @@ class Interacts {
 	}
 
 	private onMouseDown = (e: MouseEvent) => {
-		this.dragging = true
 		this.mouseDownCoord = this.calcCoord(e)
-		this.map.handleInteractEvent('mousedown', this.mouseCoord)
+		this.map.handleInteractEvent('mousedown', this.mouseDownCoord)
+		if (this.map.boxSelectEnabled && this.isBoxSelectTrigger(e)) {
+			this.boxSelecting = true
+			this.dragging = false
+			this.map.view.setControlsEnabled(false)
+			this.map.boxSelectWidget?.start(this.mouseDownCoord.left, this.mouseDownCoord.top)
+			return
+		}
+		this.dragging = true
 	}
 
 	//记录鼠标实时坐标，并通过 map 触发 mousemove 事件
 	private onMouseMove = (e: MouseEvent) => {
 		this.mouseCoord = this.calcCoord(e)
+		if (this.boxSelecting) {
+			this.map.boxSelectWidget?.update(this.mouseCoord.left, this.mouseCoord.top)
+			return
+		}
 		if (this.dragging) {
 			this.map.handleInteractEvent('drag', this.mouseCoord)
 		} else {
@@ -54,6 +66,20 @@ class Interacts {
 	private onMouseUp = (e: MouseEvent) => {
 		const mouseCoord = this.calcCoord(e)
 		this.dragging = false
+		if (this.boxSelecting) {
+			this.boxSelecting = false
+			this.map.view.setControlsEnabled(true)
+			this.map.boxSelectWidget?.update(mouseCoord.left, mouseCoord.top)
+			this.map.boxSelectWidget?.end()
+			const moveDistance =
+				Math.abs(mouseCoord.left - this.mouseDownCoord.left) +
+				Math.abs(mouseCoord.top - this.mouseDownCoord.top)
+			if (moveDistance <= Interacts.CLICK_THRESHOLD) {
+				return
+			}
+			this.pickBox(this.mouseDownCoord, mouseCoord)
+			return
+		}
 		this.map.handleInteractEvent('mouseup', this.mouseCoord)
 		if (
 			Math.abs(mouseCoord.left - this.mouseDownCoord.left) +
@@ -98,12 +124,12 @@ class Interacts {
 		}
 	}
 
-	private async pick(mouseCoord: { left: number; top: number; x: number; y: number }) {
+	private pick(mouseCoord: { left: number; top: number; x: number; y: number }) {
 		const layers = this.map.layerManager.layers
 		for (let layer of layers) {
 			if (layer.pick) {
 				const s = performance.now()
-				const data = await layer.pick(mouseCoord.x, mouseCoord.y)
+				const data = layer.pick(mouseCoord.x, mouseCoord.y)
 				if (data.length > 0) {
 					console.log('Picked points :', data)
 					console.log('Pick time:', performance.now() - s)
@@ -117,6 +143,45 @@ class Interacts {
 				}
 			}
 		}
+	}
+
+	private pickBox(
+		start: { left: number; top: number; x: number; y: number },
+		end: { left: number; top: number; x: number; y: number }
+	) {
+		const layers = this.map.layerManager.layers
+		const minX = Math.min(start.x, end.x)
+		const maxX = Math.max(start.x, end.x)
+		const minY = Math.min(start.y, end.y)
+		const maxY = Math.max(start.y, end.y)
+		const resolution = this.map.view.getResolution()
+		const results: { layerId: string; data: number[] }[] = []
+		console.log(minX, maxX, minY, maxY)
+		for (let layer of layers) {
+			if (layer.pickBox) {
+				const data = layer.pickBox(minX, minY, maxX, maxY, resolution)
+				if (data.length > 0) {
+					console.log(`pick box: ${data}`)
+					results.push({ layerId: layer.getId(), data })
+				}
+			}
+		}
+		if (results.length > 0) {
+			const left = Math.min(start.left, end.left)
+			const right = Math.max(start.left, end.left)
+			const top = Math.min(start.top, end.top)
+			const bottom = Math.max(start.top, end.top)
+			this.map.emit('boxselect', { left, right, top, bottom, data: results })
+		}
+	}
+
+	private isBoxSelectTrigger(e: MouseEvent) {
+		const key = this.map.boxSelectKey
+		if (key === 'ctrl') return e.ctrlKey
+		if (key === 'shift') return e.shiftKey
+		if (key === 'alt') return e.altKey
+		if (key === 'meta') return e.metaKey
+		return false
 	}
 }
 

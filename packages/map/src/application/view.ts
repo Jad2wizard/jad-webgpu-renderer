@@ -86,6 +86,10 @@ class View {
 		this.camera.updateProjectionMatrix()
 	}
 
+	public setControlsEnabled(enabled: boolean) {
+		this.controls.enabled = enabled
+	}
+
 	public setCenter(center: [number, number]) {
 		const world = this.lonlat2World(center[0], center[1])
 		this.camera.position.x = world.x

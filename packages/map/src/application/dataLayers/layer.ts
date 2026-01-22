@@ -20,7 +20,8 @@ export interface IDataLayer {
 	onTimeUpdate(time: number): void
 	clearAll(): void
 	dispose(): void
-	pick?(x: number, y: number): Promise<number[]>
+	pick?(x: number, y: number): number[]
+	pickBox?(minX: number, minY: number, maxX: number, maxY: number, resolution: number): number[]
 }
 
 export type IBaseLayerProps = {

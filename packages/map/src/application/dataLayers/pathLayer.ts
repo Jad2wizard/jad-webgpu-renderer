@@ -83,6 +83,10 @@ class PathLayer extends BaseLayer implements IDataLayer {
 		return Promise.resolve(true)
 	}
 
+	pickBox(minX: number, minY: number, maxX: number, maxY: number, resolution: number): number[] {
+		return []
+	}
+
 	async updateData(data: Data, _fields?: LabelFields, style?: StyleParams) {
 		const token = ++this.updateToken
 		if (style) {

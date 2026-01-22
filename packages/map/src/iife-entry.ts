@@ -31,7 +31,8 @@ function generateRandomScatterData(count: number = 100) {
 function createMap(container: HTMLElement, options: {
 	tileUrl?: string,
 	center?: { lon: number, lat: number },
-	extent?: { w: number, s: number, e: number, n: number }
+	extent?: { w: number, s: number, e: number, n: number },
+	boxSelect?: { enabled?: boolean, key?: 'ctrl' | 'shift' | 'alt' | 'meta' }
 } = {}) {
 	const tileUrl = options.tileUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 	const tileLayer = createTileLayer(tileUrl)
@@ -41,6 +42,7 @@ function createMap(container: HTMLElement, options: {
 		tileLayer,
 		center: options.center,
 		extent: options.extent,
+		boxSelect: options.boxSelect,
 	})
 
 	return gmap

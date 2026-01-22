@@ -235,7 +235,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 				radiusStorage.updateValue(newRadiuses)
 			}
 
-			this.treeIds = ids
+			this.treeIds = new Int32Array(ids)
 			// 将 kdtree.points与 geometry的 position 共享 buffer，以及重排序其它 attributes 之后
 			// tree.ids 就变成了简单的递增数组，失去了作为kdtree.points原始数据的索引的意义，故删掉
 			pool.freeInt32(tree.ids)
@@ -278,10 +278,9 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		this.map = undefined
 	}
 
-	async pick(x: number, y: number): Promise<number[]> {
+	pick(x: number, y: number): number[] {
 		if (!this.points || !this.map) return []
 
-		//获取分辨率，单位是：米/像素
 		const resolution = this.map.view.getResolution()
 		const indices = this.indexTree.query(x, y, resolution, this.points, this.style.radius)
 		const pickedIndices: number[] = []
@@ -292,6 +291,48 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 			pickedIndices.push(this.treeIds[index])
 		}
 		return pickedIndices
+	}
+
+	pickBox(minX: number, minY: number, maxX: number, maxY: number, resolution: number): number[] {
+		if (!this.points || !this.map) return []
+		if (!this.treeIds) return []
+
+		const minPixelTol = 3
+		const maxRadius = Math.max(this.style.radius || 0, this.indexTree.getMaxPointRadius())
+		const expand = Math.max(minPixelTol, maxRadius) * resolution
+
+		const queryMinX = Math.min(minX, maxX) - expand
+		const queryMaxX = Math.max(minX, maxX) + expand
+		const queryMinY = Math.min(minY, maxY) - expand
+		const queryMaxY = Math.max(minY, maxY) + expand
+
+		const pickedIndices: number[] = []
+		const positionAttr = this.points.geometry.getAttribute('position')
+		const positions = positionAttr?.array
+		const radiusStorage = this.points.getRadiusStorage()
+		const styleRadius = this.style.radius || 0
+
+		this.indexTree.range(queryMinX, queryMinY, queryMaxX, queryMaxY, (index: number) => {
+			if (!positions) return
+			const px = positions[index * 2]
+			const py = positions[index * 2 + 1]
+			let pointRadius = styleRadius
+			if (radiusStorage.hasData) {
+				const r = radiusStorage.getPointRadius(index)
+				if (r !== undefined) pointRadius = r
+			}
+			const radiusWorld = pointRadius * resolution
+			if (
+				px >= Math.min(minX, maxX) - radiusWorld &&
+				px <= Math.max(minX, maxX) + radiusWorld &&
+				py >= Math.min(minY, maxY) - radiusWorld &&
+				py <= Math.max(minY, maxY) + radiusWorld
+			) {
+				pickedIndices.push(this.treeIds![index])
+			}
+		})
+
+		return pickedIndices.sort((a, b) => a - b)
 	}
 
 	private parseData(data: Data) {

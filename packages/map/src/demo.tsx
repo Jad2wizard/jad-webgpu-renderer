@@ -133,6 +133,10 @@ const Demo = () => {
 				container: containerRef.current,
 				tileLayer: createTileLayer(tile_url_template),
 				autoFit: true,
+				boxSelect: {
+					enabled: true,
+					key: 'shift',
+				},
 			})
 			const gmap = gmapRef.current
 			// gmap.on('mousedown', (e) => {
@@ -161,7 +165,7 @@ const Demo = () => {
 			gmapRef.current.view.setCenter([116.4, 39.9])
 			gmapRef.current.view.setZoom(10) // Zoom in a bit
 
-			const { heatmapData, pathsData, scatterData } = generateDemoData(8)
+			const { heatmapData, pathsData, scatterData } = generateDemoData(64)
 
 			// 1. Heatmap Layer
 			// const heatmapLayer = gmapRef.current.addLayer('heatmap-layer', 'heatmap', {
@@ -188,43 +192,43 @@ const Demo = () => {
 			// heatmapLayer.setLevel(1)
 
 			// 2. Path Layer
-			// const pathLayer = gmapRef.current.addLayer('path-layer', 'path', {
-			// 	fields: {
-			// 		pathId: 0,
-			// 		lon: 1,
-			// 		lat: 2,
-			// 		startTime: 3,
-			// 	},
-			// 	style: {
-			// 		color: [1, 0.3, 0.2, 0.9],
-			// 		lineWidth: 10,
-			// 		headPointColor: [1, 0.9, 0.3, 1],
-			// 		headPointSize: 10,
-			// 		headPointVisible: false,
-			// 		blending: 'normalBlending',
-			// 		drawLine: false,
-			// 		trailDuration: 0,
-			// 	},
-			// 	getPathStyle: (pathId) => {
-			// 		if (String(pathId) === '1') {
-			// 			return {
-			// 				// pathId 1 specific style
-			// 				tailDuration: 3, // seconds
-			// 			}
-			// 		} else if (String(pathId) === '2') {
-			// 			return {
-			// 				// pathId 2 specific style
-			// 				color: [1, 1, 0, 0.7],
-			// 				headPointVisible: true,
-			// 				headPointSize: 15,
-			// 				drawLine: true,
-			// 			}
-			// 		}
-			// 		return {}
-			// 	},
-			// })
-			// pathLayer.updateData(pathsData)
-			// pathLayer.setLevel(2)
+			const pathLayer = gmapRef.current.addLayer('path-layer', 'path', {
+				fields: {
+					pathId: 0,
+					lon: 1,
+					lat: 2,
+					startTime: 3,
+				},
+				style: {
+					color: [1, 0.3, 0.2, 0.9],
+					lineWidth: 10,
+					headPointColor: [1, 0.9, 0.3, 1],
+					headPointSize: 10,
+					headPointVisible: false,
+					blending: 'normalBlending',
+					drawLine: false,
+					trailDuration: 0,
+				},
+				getPathStyle: (pathId) => {
+					if (String(pathId) === '1') {
+						return {
+							// pathId 1 specific style
+							tailDuration: 3, // seconds
+						}
+					} else if (String(pathId) === '2') {
+						return {
+							// pathId 2 specific style
+							color: [1, 1, 0, 0.7],
+							headPointVisible: true,
+							headPointSize: 15,
+							drawLine: true,
+						}
+					}
+					return {}
+				},
+			})
+			pathLayer.updateData(pathsData)
+			pathLayer.setLevel(2)
 
 			// 3. Scatter Layer
 			const scatterLayer = gmapRef.current.addLayer('scatter-points', 'scatter', {

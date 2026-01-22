@@ -8,6 +8,7 @@ import { Extent } from '@map/types'
 import LayerManager, { LayerType, LayerProps } from '@map/application/layerManager'
 import '@map/application/dataLayers/scatterLayer'
 import PerformanceWidget from './widgets/PerformanceWidget'
+import BoxSelectWidget from './widgets/BoxSelectWidget'
 
 type IProps = {
 	container: HTMLDivElement
@@ -15,6 +16,10 @@ type IProps = {
 	center?: { lon: number; lat: number }
 	extent?: Extent
 	autoFit?: boolean
+	boxSelect?: {
+		enabled?: boolean
+		key?: 'ctrl' | 'shift' | 'alt' | 'meta'
+	}
 }
 
 const defaultExtent: Extent = { w: 73, s: 18, e: 135, n: 54 }
@@ -28,6 +33,9 @@ class GMap extends EventEmitter {
 	private _layerManager = new LayerManager(this)
 	private _container: HTMLDivElement
 	private _performanceWidget: PerformanceWidget
+	private _boxSelectWidget?: BoxSelectWidget
+	private _boxSelectEnabled = false
+	private _boxSelectKey: 'ctrl' | 'shift' | 'alt' | 'meta' = 'ctrl'
 	private extent: Extent
 	private active = true
 	private resizeObserver?: ResizeObserver
@@ -37,11 +45,19 @@ class GMap extends EventEmitter {
 	constructor(props: IProps) {
 		super()
 		this._container = props.container
+		if (!this._container.style.position) {
+			this._container.style.position = 'relative'
+		}
+		this._boxSelectEnabled = !!props.boxSelect?.enabled
+		this._boxSelectKey = props.boxSelect?.key || 'ctrl'
 		this._interacts = new Interacts({ map: this })
 		this._renderer = new Renderer({ container: this._container, antialias: true })
 		this._tileMap = this.initTileMap({ ...props, extent: this.extent })
 		this._view = this.initView({ ...props, extent: this.extent }, this._renderer.canvas)
 		this._performanceWidget = new PerformanceWidget(this)
+		if (this._boxSelectEnabled) {
+			this._boxSelectWidget = new BoxSelectWidget(this)
+		}
 
 		this.extent = props.extent || { ...defaultExtent }
 		this.autoFit = !!props.autoFit
@@ -75,6 +91,18 @@ class GMap extends EventEmitter {
 
 	get container() {
 		return this._container
+	}
+
+	get boxSelectEnabled() {
+		return this._boxSelectEnabled
+	}
+
+	get boxSelectKey() {
+		return this._boxSelectKey
+	}
+
+	get boxSelectWidget() {
+		return this._boxSelectWidget
 	}
 
 	get tileMap() {
@@ -213,6 +241,8 @@ class GMap extends EventEmitter {
 
 	dispose() {
 		this._performanceWidget.dispose()
+		this._boxSelectWidget?.dispose()
+		this._interacts.dispose()
 		this._layerManager.dispose()
 		this.view.dispose()
 		this.removeAllListeners()

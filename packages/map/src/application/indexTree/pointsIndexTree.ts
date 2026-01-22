@@ -18,6 +18,10 @@ export class PointsIndexTree {
 		return this.tree
 	}
 
+	public getMaxPointRadius() {
+		return this._maxPointRadius
+	}
+
 	public rebuildFromData(
 		positions: Float32Array,
 		count: number,
@@ -104,5 +108,16 @@ export class PointsIndexTree {
 			this.tree = undefined
 		}
 		this._maxPointRadius = 0
+	}
+
+	public range(
+		minX: number,
+		minY: number,
+		maxX: number,
+		maxY: number,
+		visit: (index: number) => void
+	) {
+		if (!this.tree) return
+		this.tree.range([minX, minY], [maxX, maxY], visit)
 	}
 }

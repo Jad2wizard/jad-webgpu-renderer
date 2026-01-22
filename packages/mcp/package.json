@@ -6,6 +6,7 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
+		"build": "node -e \"console.log('no build step for @webgpu-gmap/mcp')\"",
 		"start": "node src/index.js",
 		"dev": "node src/index.js",
 		"debug": "node --inspect src/index.js",
