@@ -2,6 +2,7 @@ node_modules/*
 **/node_modules/
 node_modules_old/*
 dist/*.js
+/dist/
 *.DS_Store
 .idea/*
 diff.log
