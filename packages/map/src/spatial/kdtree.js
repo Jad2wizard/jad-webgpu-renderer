@@ -33,14 +33,12 @@ proto.serialize = function () {
 	}
 }
 
-//Range query
 proto.range = function kdtRangeQuery(lo, hi, visit) {
 	var n = this.length
 	if (n < 1) {
 		return
 	}
 
-	//Check degenerate case
 	var d = this.dimension
 	for (var i = 0; i < d; ++i) {
 		if (hi[i] < lo[i]) {
@@ -51,7 +49,6 @@ proto.range = function kdtRangeQuery(lo, hi, visit) {
 	var points = this.points
 	var ids = this.ids
 
-	//Walk tree in level order, skipping subtrees which do not intersect range
 	var visitRange = ndscratch.malloc([n, 2, d])
 	var visitIndex = pool.mallocInt32(n)
 	var rangeData = visitRange.data
@@ -90,7 +87,6 @@ proto.range = function kdtRangeQuery(lo, hi, visit) {
 			}
 		}
 
-		//Visit children
 		var pk = pointData[pidx + k]
 		var hk = rangeData[hiidx + k]
 		var lk = rangeData[loidx + k]
@@ -127,7 +123,6 @@ proto.range = function kdtRangeQuery(lo, hi, visit) {
 			}
 		}
 
-		//Increment pointer
 		visitTop += 1
 	}
 	ndscratch.free(visitRange)
@@ -147,7 +142,6 @@ proto.rnn = function (point, radius, visit) {
 	var points = this.points
 	var ids = this.ids
 
-	//Walk tree in level order, skipping subtrees which do not intersect sphere
 	var visitDistance = ndscratch.malloc([n, d])
 	var visitIndex = pool.mallocInt32(n)
 	var distanceData = visitDistance.data
@@ -157,18 +151,15 @@ proto.rnn = function (point, radius, visit) {
 	var r2 = radius * radius
 	var retval
 
-	//Initialize top of queue
 	visitIndex[0] = 0
 	for (var i = 0; i < d; ++i) {
 		visitDistance.set(0, i, 0)
 	}
 
-	//Walk over queue
 	while (visitTop < visitCount) {
 		var idx = visitIndex[visitTop]
 		var pidx = points.index(idx, 0)
 
-		//Check if point in sphere
 		var d2 = 0.0
 		for (var i = 0; i < d; ++i) {
 			d2 += Math.pow(point[i] - pointData[pidx + i], 2)
@@ -184,7 +175,6 @@ proto.rnn = function (point, radius, visit) {
 			}
 		}
 
-		//Visit children
 		var k = bits.log2(idx + 1) % d
 		var ds = 0.0
 		var didx = visitDistance.index(visitTop, 0)
@@ -194,7 +184,6 @@ proto.rnn = function (point, radius, visit) {
 			}
 		}
 
-		//Handle split axis
 		var qk = point[k]
 		var pk = pointData[pidx + k]
 		var dk = distanceData[didx + k]
@@ -234,7 +223,6 @@ proto.rnn = function (point, radius, visit) {
 			}
 		}
 
-		//Increment pointer
 		visitTop += 1
 	}
 
@@ -288,7 +276,6 @@ proto.nn = function (point, maxDistance) {
 			nearest = idx
 		}
 
-		//Compute distance bounds for children
 		var k = bits.log2(idx + 1) % d
 		var ds = 0
 		for (var i = 0; i < d; ++i) {
@@ -357,7 +344,6 @@ proto.nn = function (point, maxDistance) {
 }
 
 proto.knn = function (point, maxPoints, maxDistance) {
-	//Check degenerate cases
 	if (typeof maxDistance === 'number') {
 		if (maxDistance < 0) {
 			return []
@@ -377,14 +363,12 @@ proto.knn = function (point, maxPoints, maxDistance) {
 	} else {
 		maxPoints = n
 	}
-	var ids = this.ids
 
 	var d = this.dimension
 	var points = this.points
 	var pointData = points.data
 	var dataVector = pool.mallocFloat64(d)
 
-	//List of closest points
 	var closestPoints = new KDTHeap(maxPoints, 1)
 	var cl_index = closestPoints.index
 	var cl_data = closestPoints.data
@@ -398,7 +382,6 @@ proto.knn = function (point, maxPoints, maxDistance) {
 	}
 	toVisit.count += 1
 
-	var nearest = -1
 	var nearestD = maxDistance
 
 	while (toVisit.count > 0) {
@@ -425,7 +408,6 @@ proto.knn = function (point, maxPoints, maxDistance) {
 			}
 		}
 
-		//Compute distance bounds for children
 		var k = bits.log2(idx + 1) % d
 		var ds = 0
 		for (var i = 0; i < d; ++i) {
@@ -482,7 +464,6 @@ proto.knn = function (point, maxPoints, maxDistance) {
 	pool.freeFloat64(dataVector)
 	toVisit.dispose()
 
-	//Sort result
 	var result = new Array(closestPoints.count)
 	var ids = this.ids
 	for (var i = closestPoints.count - 1; i >= 0; --i) {
@@ -547,7 +528,6 @@ function createKDTree(points) {
 		n = points.shape[0]
 		d = points.shape[1]
 
-		//Round up data type size
 		var type = points.dtype
 		if (type === 'int8' || type === 'int16' || type === 'int32') {
 			type = 'int32'
@@ -576,11 +556,9 @@ function createKDTree(points) {
 	var pointer = 0
 	var pointData = pointArray.data
 	var arrayData = indexed.data
-	var l2_n = bits.log2(bits.nextPow2(n))
 
 	var sel_cmp = ndselect.compile(indexed.order, true, indexed.dtype)
 
-	//Walk tree in level order
 	var toVisit = new Queue()
 	toVisit.push(indexed)
 	while (pointer < n) {
@@ -588,16 +566,13 @@ function createKDTree(points) {
 		var array = head
 		var nn = array.shape[0] | 0
 
-		//Find median
 		if (nn > 1) {
 			var k = bits.log2(pointer + 1) % d
-			var median
 			var n_2 = inorderTree.root(nn)
-			median = sel_cmp(array, n_2, function (a, b) {
+			var median = sel_cmp(array, n_2, function (a, b) {
 				return a.get(k) - b.get(k)
 			})
 
-			//Copy into new array
 			var pptr = pointArray.index(pointer, 0)
 			var mptr = median.offset
 			for (var i = 0; i < d; ++i) {
@@ -606,13 +581,11 @@ function createKDTree(points) {
 			indexArray[pointer] = arrayData[mptr]
 			pointer += 1
 
-			//Queue new items
 			toVisit.push(array.hi(n_2))
 			if (nn > 2) {
 				toVisit.push(array.lo(n_2 + 1))
 			}
 		} else {
-			//Copy into new array
 			var mptr = array.offset
 			var pptr = pointArray.index(pointer, 0)
 			for (var i = 0; i < d; ++i) {
@@ -623,7 +596,6 @@ function createKDTree(points) {
 		}
 	}
 
-	//Release indexed
 	pool.free(indexed.data)
 
 	return new KDTree(pointArray, indexArray, n, d)

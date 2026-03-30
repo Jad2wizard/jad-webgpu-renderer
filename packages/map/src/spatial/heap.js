@@ -89,14 +89,12 @@ proto.heapDown = function (i) {
 	}
 }
 
-//Clear item from top of heap
 proto.pop = function () {
 	this.count -= 1
 	this.heapSwap(0, this.count)
 	this.heapDown(0)
 }
 
-//Assume object already written to data
 proto.push = function () {
 	this.heapUp(this.count)
 	this.count += 1

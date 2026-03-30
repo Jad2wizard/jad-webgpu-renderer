@@ -12,7 +12,7 @@ type KDTreeLike = {
 
 export class PointsIndexTree {
 	private tree?: KDTreeLike
-	private _maxPointRadius: number = 0
+	private _maxPointRadius = 0
 
 	public getTree() {
 		return this.tree
@@ -56,7 +56,7 @@ export class PointsIndexTree {
 	): number[] {
 		if (!this.tree || !points) return []
 
-		const thresholdPx = 3 //设置的最小搜索半径
+		const thresholdPx = 3
 		const maxRPx = Math.max(defaultRadius || 0, this._maxPointRadius)
 
 		const searchRadiusPx = Math.max(thresholdPx, maxRPx)

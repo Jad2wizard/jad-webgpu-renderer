@@ -1,28 +1,43 @@
-import GMap from './index'
+import GMap from '../index'
+
+export type InteractionConfig = {
+	boxSelect?: {
+		enabled?: boolean
+		key?: 'ctrl' | 'shift' | 'alt' | 'meta'
+	}
+}
 
 type IProps = {
 	map: GMap
+	config?: InteractionConfig
 }
+
+type Coord = { left: number; top: number; x: number; y: number }
 
 class Interacts {
 	private map: GMap
-	private mouseCoord: { left: number; top: number; x: number; y: number }
-	private mouseDownCoord: { left: number; top: number; x: number; y: number }
+	private config?: InteractionConfig
+	private mouseCoord: Coord
+	private mouseDownCoord: Coord
 	private dragging = false
 	private boxSelecting = false
-
-	//以下三个参数用于在 onMouseUp 中判断鼠标点击事件是click 还是 dblclick
 	private firstClickTime = 0
 	private clickTimer: NodeJS.Timeout | null = null
 	private clickDelay = 250
+	private boxSelectDom?: HTMLDivElement
+	private boxSelectStartLeft = 0
+	private boxSelectStartTop = 0
 
-	// 点击和拖拽的距离阈值（像素）
 	private static readonly CLICK_THRESHOLD = 4
 
 	constructor(props: IProps) {
 		this.map = props.map
+		this.config = props.config
 		this.mouseCoord = { left: 0, top: 0, x: 0, y: 0 }
 		this.mouseDownCoord = { left: 0, top: 0, x: 0, y: 0 }
+		if (this.config?.boxSelect?.enabled) {
+			this.initBoxSelectDom()
+		}
 		const element = this.map.container
 		element.addEventListener('mousedown', this.onMouseDown)
 		element.addEventListener('mousemove', this.onMouseMove)
@@ -39,21 +54,20 @@ class Interacts {
 	private onMouseDown = (e: MouseEvent) => {
 		this.mouseDownCoord = this.calcCoord(e)
 		this.map.handleInteractEvent('mousedown', this.mouseDownCoord)
-		if (this.map.boxSelectEnabled && this.isBoxSelectTrigger(e)) {
+		if (this.config?.boxSelect?.enabled && this.isBoxSelectTrigger(e)) {
 			this.boxSelecting = true
 			this.dragging = false
 			this.map.view.setControlsEnabled(false)
-			this.map.boxSelectWidget?.start(this.mouseDownCoord.left, this.mouseDownCoord.top)
+			this.startBoxSelect(this.mouseDownCoord.left, this.mouseDownCoord.top)
 			return
 		}
 		this.dragging = true
 	}
 
-	//记录鼠标实时坐标，并通过 map 触发 mousemove 事件
 	private onMouseMove = (e: MouseEvent) => {
 		this.mouseCoord = this.calcCoord(e)
 		if (this.boxSelecting) {
-			this.map.boxSelectWidget?.update(this.mouseCoord.left, this.mouseCoord.top)
+			this.updateBoxSelect(this.mouseCoord.left, this.mouseCoord.top)
 			return
 		}
 		if (this.dragging) {
@@ -69,8 +83,8 @@ class Interacts {
 		if (this.boxSelecting) {
 			this.boxSelecting = false
 			this.map.view.setControlsEnabled(true)
-			this.map.boxSelectWidget?.update(mouseCoord.left, mouseCoord.top)
-			this.map.boxSelectWidget?.end()
+			this.updateBoxSelect(mouseCoord.left, mouseCoord.top)
+			this.endBoxSelect()
 			const moveDistance =
 				Math.abs(mouseCoord.left - this.mouseDownCoord.left) +
 				Math.abs(mouseCoord.top - this.mouseDownCoord.top)
@@ -93,9 +107,7 @@ class Interacts {
 			this.firstClickTime = performance.now()
 			this.clickTimer = setTimeout(() => {
 				if (e.button === 0) {
-					// 先触发不带数据的 click 事件
 					this.map.handleInteractEvent('click', mouseCoord)
-					// 然后执行拾取，如果拾取到数据，会再次触发 click 事件（带 data）
 					this.pick(mouseCoord)
 				} else if (e.button === 2) {
 					this.map.handleInteractEvent('rightClick', mouseCoord)
@@ -122,9 +134,12 @@ class Interacts {
 			clearTimeout(this.clickTimer)
 			this.clickTimer = null
 		}
+		if (this.boxSelectDom?.parentElement) {
+			this.boxSelectDom.parentElement.removeChild(this.boxSelectDom)
+		}
 	}
 
-	private pick(mouseCoord: { left: number; top: number; x: number; y: number }) {
+	private pick(mouseCoord: Coord) {
 		const layers = this.map.layerManager.layers
 		for (let layer of layers) {
 			if (layer.pick) {
@@ -145,10 +160,7 @@ class Interacts {
 		}
 	}
 
-	private pickBox(
-		start: { left: number; top: number; x: number; y: number },
-		end: { left: number; top: number; x: number; y: number }
-	) {
+	private pickBox(start: Coord, end: Coord) {
 		const layers = this.map.layerManager.layers
 		const minX = Math.min(start.x, end.x)
 		const maxX = Math.max(start.x, end.x)
@@ -176,12 +188,67 @@ class Interacts {
 	}
 
 	private isBoxSelectTrigger(e: MouseEvent) {
-		const key = this.map.boxSelectKey
+		const key = this.config?.boxSelect?.key || 'ctrl'
 		if (key === 'ctrl') return e.ctrlKey
 		if (key === 'shift') return e.shiftKey
 		if (key === 'alt') return e.altKey
 		if (key === 'meta') return e.metaKey
 		return false
+	}
+
+	private initBoxSelectDom() {
+		this.boxSelectDom = document.createElement('div')
+		const style = this.boxSelectDom.style
+		style.position = 'absolute'
+		style.left = '0'
+		style.top = '0'
+		style.width = '0'
+		style.height = '0'
+		style.border = '1px dashed #4aa3ff'
+		style.backgroundColor = 'rgba(74, 163, 255, 0.15)'
+		style.pointerEvents = 'none'
+		style.zIndex = '120'
+		style.userSelect = 'none'
+		style.display = 'none'
+		this.map.container.appendChild(this.boxSelectDom)
+	}
+
+	private startBoxSelect(left: number, top: number) {
+		const localCoord = this.toLocalCoord(left, top)
+		this.boxSelectStartLeft = localCoord.left
+		this.boxSelectStartTop = localCoord.top
+		if (this.boxSelectDom) {
+			this.boxSelectDom.style.display = 'block'
+		}
+		this.updateBoxSelect(left, top)
+	}
+
+	private updateBoxSelect(left: number, top: number) {
+		if (!this.boxSelectDom || !this.boxSelecting) return
+		const localCoord = this.toLocalCoord(left, top)
+		const minLeft = Math.min(this.boxSelectStartLeft, localCoord.left)
+		const minTop = Math.min(this.boxSelectStartTop, localCoord.top)
+		const width = Math.abs(this.boxSelectStartLeft - localCoord.left)
+		const height = Math.abs(this.boxSelectStartTop - localCoord.top)
+		const style = this.boxSelectDom.style
+		style.left = `${minLeft}px`
+		style.top = `${minTop}px`
+		style.width = `${width}px`
+		style.height = `${height}px`
+	}
+
+	private endBoxSelect() {
+		if (this.boxSelectDom) {
+			this.boxSelectDom.style.display = 'none'
+		}
+	}
+
+	private toLocalCoord(left: number, top: number) {
+		const rect = this.map.container.getBoundingClientRect()
+		return {
+			left: left - rect.left,
+			top: top - rect.top,
+		}
 	}
 }
 

@@ -133,9 +133,11 @@ const Demo = () => {
 				container: containerRef.current,
 				tileLayer: createTileLayer(tile_url_template),
 				autoFit: true,
-				boxSelect: {
-					enabled: true,
-					key: 'shift',
+				interaction: {
+					boxSelect: {
+						enabled: true,
+						key: 'ctrl',
+					},
 				},
 			})
 			const gmap = gmapRef.current

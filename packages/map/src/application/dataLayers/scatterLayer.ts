@@ -4,7 +4,7 @@ import { Points } from '@webgpu-gmap/renderer'
 import { Color, Blending } from '@map/types'
 import { delay, parsePositionsAndExtent } from '@map/utils'
 import GMap from '..'
-import { PointsIndexTree } from '../indexTree/pointsIndexTree'
+import { PointsIndexTree } from '@map/spatial/pointsIndexTree'
 
 // @ts-ignore
 import * as pool from 'typedarray-pool'
