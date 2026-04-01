@@ -3,7 +3,7 @@ import { Color, Extent } from '@map/types'
 export const delay = (duration = 1000) => new Promise((resolve) => setTimeout(resolve, duration))
 
 export const isSameColor = (c1: Color, c2: Color) => {
-	return c1.every((c, i) => c2[i])
+	return c1.every((c: number, i: number) => c === c2[i])
 }
 
 // 通用的数据解析结果接口

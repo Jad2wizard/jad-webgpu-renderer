@@ -13,6 +13,8 @@ import Storage from './material/storage'
 import Geometry from './geometry/geometry'
 import Attribute from './geometry/attribute'
 
+export type * from './types'
+
 export {
 	Renderer,
 	Scene,

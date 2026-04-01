@@ -2,7 +2,7 @@ import * as _ from 'lodash'
 import { IDataLayer, BaseLayer, IBaseLayerProps, Data, LabelFields, StyleParams } from './layer'
 import { Heatmap } from '@webgpu-gmap/renderer'
 import { Blending } from '@map/types'
-import { Color as RendererColor } from '@webgpu-gmap/renderer/src/types'
+import { Color as RendererColor } from '@webgpu-gmap/renderer'
 import { delay, parsePositionsAndExtent } from '@map/utils'
 import GMap from '..'
 

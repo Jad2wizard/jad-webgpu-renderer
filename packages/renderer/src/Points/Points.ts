@@ -104,10 +104,10 @@ class Points extends Model implements IPlayable {
 		return this.material.getStorage('radius') as RadiusStorage
 	}
 
-	batchUpdateColor(params: [number, Color][]) {
-		let colorArray = this.getAttribute('color')
+	private _ensureColorAttribute(): Uint8Array {
+		let colorArray = this.getAttribute('color') as Uint8Array
 		if (!colorArray) {
-			const colorArray32 = new Uint32Array(this.total) //使用 Uint32Array 代替 Uint8Array，达到 TypedArray 快速填充的目的
+			const colorArray32 = new Uint32Array(this.total)
 			const packedColor = packUint8ToUint32(this._style.color.map((c: number) => c * 255))
 			colorArray32.fill(packedColor)
 			colorArray = new Uint8Array(colorArray32.buffer)
@@ -117,19 +117,37 @@ class Points extends Model implements IPlayable {
 				capacity: this.total * 4,
 			})
 			this.geometry.setAttribute('color', colorAttribute)
+
 			this.material.updateShaderCode(
 				true,
 				this.material.hasRadiusAttribute,
 				this.material.hasTimeAttribute
 			)
 		}
-		for (let item of params) {
-			const [i, color] = item
-			colorArray[i * 4 + 0] = color[0] * 255
-			colorArray[i * 4 + 1] = color[1] * 255
-			colorArray[i * 4 + 2] = color[2] * 255
-			colorArray[i * 4 + 3] = color[3] * 255
+		return colorArray
+	}
+
+	/**
+	 * 批量更新散点的颜色
+	 * @param params 每个元素为 [index, color]，index 为散点的索引，color 为新的颜色
+	 */
+	batchUpdateColor(params: [number, Color][]) {
+		const colorArray = this._ensureColorAttribute()
+
+		const len = params.length
+		for (let idx = 0; idx < len; idx++) {
+			const item = params[idx]
+			const i = item[0]
+			const color = item[1]
+
+			const offset = i * 4
+			// 使用位运算 `| 0` 显式转换为整型，避免隐式的向下截断
+			colorArray[offset] = (color[0] * 255) | 0
+			colorArray[offset + 1] = (color[1] * 255) | 0
+			colorArray[offset + 2] = (color[2] * 255) | 0
+			colorArray[offset + 3] = (color[3] * 255) | 0
 		}
+
 		this.updateAttribute('color', colorArray)
 	}
 
@@ -159,33 +177,30 @@ class Points extends Model implements IPlayable {
 		if (!pointIndices) {
 			this._style = deepMerge(this._style, style)
 			this.updateMaterial()
+
+			// 恢复为覆盖逻辑：如果已经存在 color attribute，全局更新时同步覆盖底层的 attribute 数据
+			if (style.color && this.getAttribute('color')) {
+				const colorArray = this._ensureColorAttribute()
+				const colorArray32 = new Uint32Array(colorArray.buffer)
+				const packedColor = packUint8ToUint32(style.color.map((c: number) => c * 255))
+				colorArray32.fill(packedColor)
+				this.updateAttribute('color', colorArray)
+			}
 		} else {
 			if (style.color) {
-				let colorArray = this.getAttribute('color')
-				if (!colorArray) {
-					const colorArray32 = new Uint32Array(this.total) //使用 Uint32Array 代替 Uint8Array，达到 TypedArray 快速填充的目的
-					const packedColor = packUint8ToUint32(
-						this._style.color.map((c: number) => c * 255)
-					)
-					colorArray32.fill(packedColor)
-					colorArray = new Uint8Array(colorArray32.buffer)
-					const colorAttribute = new Attribute('color', colorArray, 4, {
-						stepMode: 'instance',
-						shaderLocation: 1,
-						capacity: this.total * 4,
-					})
-					this.geometry.setAttribute('color', colorAttribute)
-					this.material.updateShaderCode(
-						true,
-						this.material.hasRadiusAttribute,
-						this.material.hasTimeAttribute
-					)
-				}
+				const colorArray = this._ensureColorAttribute()
+
+				const r = (style.color[0] * 255) | 0
+				const g = (style.color[1] * 255) | 0
+				const b = (style.color[2] * 255) | 0
+				const a = (style.color[3] * 255) | 0
+
 				for (let i of pointIndices) {
-					colorArray[i * 4 + 0] = style.color[0] * 255
-					colorArray[i * 4 + 1] = style.color[1] * 255
-					colorArray[i * 4 + 2] = style.color[2] * 255
-					colorArray[i * 4 + 3] = style.color[3] * 255
+					const offset = i * 4
+					colorArray[offset + 0] = r
+					colorArray[offset + 1] = g
+					colorArray[offset + 2] = b
+					colorArray[offset + 3] = a
 				}
 				this.updateAttribute('color', colorArray)
 			}
@@ -271,14 +286,6 @@ class Points extends Model implements IPlayable {
 
 		this.geometry.vertexCount = 6 //wgsl 中通过硬编码设置了两个三角形的顶点坐标，由此组成一个正方形代表一个可以设置尺寸的散点
 		this.geometry.instanceCount = props.position.length / 2
-	}
-
-	public getPickUniform() {
-		return undefined
-	}
-
-	public getPickResultStorage() {
-		return undefined
 	}
 
 	private reallocate() {

@@ -5,10 +5,11 @@
 		"packages/*"
 	],
 	"scripts": {
-		"build": "npm run build --workspaces",
+		"build": "npm run build:renderer && npm run build:map && npm run build:mcp",
 		"start:renderer": "npm run start --workspace=packages/renderer",
 		"start:map": "npm run start --workspace=packages/map",
 		"build:renderer": "npm run build --workspace=packages/renderer",
+		"build:mcp": "npm run build --workspace=packages/mcp",
 		"build:map": "npm run build --workspace=packages/map"
 	},
 	"devDependencies": {

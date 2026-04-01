@@ -33,7 +33,8 @@ export const binarySearch = (
 	compare: 'less' | 'more' = 'less'
 ) => {
 	function traverse(si: number, ei: number): number {
-		if ((arr[si] > target && compare === 'less') || (arr[ei] < target && compare === 'more')) return -1
+		if ((arr[si] > target && compare === 'less') || (arr[ei] < target && compare === 'more'))
+			return -1
 		if (si + 1 === ei) {
 			if (arr[si] <= target && compare === 'less') return si
 			if (arr[ei] >= target && compare === 'more') return ei
@@ -66,7 +67,7 @@ export const deepMerge = <T>(...obj: Partial<T>[]): T => {
  * @param {number[]} data 一个长度为四的 uint8 数组
  * @returns {number} 一个 uint32数值
  */
-export const packUint8ToUint32 = (data: [number, number, number, number]) => {
+export const packUint8ToUint32 = (data: [number, number, number, number] | number[]) => {
 	let res = 0
 	for (let i = 0; i < data.length; ++i) {
 		res += (data[i] & 255) << (i * 8)

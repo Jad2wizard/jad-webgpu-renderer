@@ -10,6 +10,7 @@ module.exports = {
 		filename: 'bundle.js',
 	},
 	resolve: {
+		symlinks: false,
 		extensions: ['.tsx', '.ts', '.js'],
 		plugins: [new TsconfigPathsPlugin()],
 		fallback: {
