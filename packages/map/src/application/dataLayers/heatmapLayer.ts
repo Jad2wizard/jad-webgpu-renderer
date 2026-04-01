@@ -61,19 +61,19 @@ class HeatmapLayer extends BaseLayer implements IDataLayer {
 
 	setSelected(selected: boolean) {
 		this.selected = selected
-		return Promise.resolve(true)
+		return true
 	}
 
 	setVisible(visible: boolean) {
 		this.visible = visible
 		if (this.heatmap) this.heatmap.visible = visible
-		return Promise.resolve(true)
+		return true
 	}
 
 	setLevel(level: number) {
 		this.level = level
 		if (this.heatmap) this.heatmap.renderOrder = level
-		return Promise.resolve(true)
+		return true
 	}
 
 	pickBox(minX: number, minY: number, maxX: number, maxY: number, resolution: number): number[] {
@@ -133,13 +133,13 @@ class HeatmapLayer extends BaseLayer implements IDataLayer {
 
 	updateStyle(style: StyleParams) {
 		this.style = _.merge(this.style, style)
-		if (!this.heatmap) return Promise.resolve(false)
+		if (!this.heatmap) return false
 		this.heatmap.setStyle(style as StyleType)
-		return Promise.resolve(true)
+		return true
 	}
 
 	onTimeUpdate(time: number): void {
-		if (this.heatmap && this.fields.startTime) {
+		if (this.heatmap && this.fields.startTime !== undefined) {
 			this.heatmap.updateCurrentTime(time / 1000 - this.startTime)
 		}
 	}
@@ -168,9 +168,9 @@ class HeatmapLayer extends BaseLayer implements IDataLayer {
 			(lon, lat) => this.map!.view.lonlat2WorldFast(lon, lat)
 		)
 
-		const startTimes = !!this.fields.startTime ? new Float32Array(len) : undefined
+		const startTimes = this.fields.startTime !== undefined ? new Float32Array(len) : undefined
 
-		if (!!this.fields.startTime) {
+		if (this.fields.startTime !== undefined) {
 			for (let i = 0; i < len; i++) {
 				const st = Number(data[i][this.fields.startTime]) / 1000
 				this.startTime = Math.min(this.startTime, st)

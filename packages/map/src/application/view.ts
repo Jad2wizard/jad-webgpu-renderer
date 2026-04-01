@@ -26,12 +26,14 @@ function calcCameraHeightFromZoom(zoom: number, screenHeight: number, fov: numbe
 	const resolution = INITIAL_RESOLUTION / Math.pow(2, zoom)
 	// 相机高度 = (分辨率 * 屏幕高度 / 2) / tan(fov/2)
 	// fov 是以度为单位，需要转换为弧度
-	console.log(fov)
 	const fovRad = (fov * Math.PI) / 180
 	const halfScreenWorldSize = (resolution * screenHeight) / 2
 	return halfScreenWorldSize / Math.tan(fovRad / 2)
 }
 
+/**
+ * 地图视角类
+ */
 class View {
 	private tileMap: TileMap
 	private width: number
@@ -67,7 +69,7 @@ class View {
 		return this._camera
 	}
 
-	public getZoom() {
+	getZoom() {
 		// 根据相机高度反推 zoom
 		const height = this.camera.position.z
 		const fovRad = (this.fov * Math.PI) / 180
@@ -77,20 +79,20 @@ class View {
 	}
 
 	// 获取当前像素分辨率（米/像素）
-	public getResolution() {
+	getResolution() {
 		return INITIAL_RESOLUTION / Math.pow(2, this.getZoom())
 	}
 
-	public animate() {
+	animate() {
 		this.camera.updateMatrixWorld()
 		this.camera.updateProjectionMatrix()
 	}
 
-	public setControlsEnabled(enabled: boolean) {
+	setControlsEnabled(enabled: boolean) {
 		this.controls.enabled = enabled
 	}
 
-	public setCenter(center: [number, number]) {
+	setCenter(center: [number, number]) {
 		const world = this.lonlat2World(center[0], center[1])
 		this.camera.position.x = world.x
 		this.camera.position.y = world.y
@@ -98,13 +100,13 @@ class View {
 		this.controls.update()
 	}
 
-	public setZoom(zoom: number) {
+	setZoom(zoom: number) {
 		const height = calcCameraHeightFromZoom(zoom, this.height, this.fov)
 		this.camera.position.z = height
 		this.controls.update()
 	}
 
-	public resize(width: number, height: number) {
+	resize(width: number, height: number) {
 		this.width = width
 		this.height = height
 		// 更新相机的宽高比
@@ -117,7 +119,11 @@ class View {
 		this.onViewChange()
 	}
 
-	public fitBounds(extent: Extent) {
+	/**
+	 * 调整地图视角以适应指定的经纬度范围
+	 * @param extent - 经纬度范围，包含西南和东北经纬度坐标
+	 */
+	fitBounds(extent: Extent) {
 		const { w, s, e, n } = extent
 		const centerLon = (w + e) / 2
 		const centerLat = (s + n) / 2
@@ -141,12 +147,12 @@ class View {
 		this.setZoom(zoom)
 	}
 
-	public lonlat2World(lon: number, lat: number) {
+	lonlat2World(lon: number, lat: number) {
 		const [x, y] = this.proj.forward([lon, lat])
 		return new Vector2(x - this.offset.x, y - this.offset.y)
 	}
 
-	public lonlat2WorldFast(lon: number, lat: number) {
+	lonlat2WorldFast(lon: number, lat: number) {
 		const { x, y } = this.projectFast(lon, lat)
 		return { x: x - this.offset.x, y: y - this.offset.y }
 	}
@@ -160,11 +166,11 @@ class View {
 		return { x, y }
 	}
 
-	public world2Lonlat(coord: Vector2): [number, number] {
+	world2Lonlat(coord: Vector2): [number, number] {
 		return this.proj.inverse([coord.x + this.offset.x, coord.y + this.offset.y])
 	}
 
-	public screen2World(left: number, top: number) {
+	screen2World(left: number, top: number) {
 		const mouse = new Vector2()
 		mouse.x = (left / this.width) * 2 - 1
 		mouse.y = -(top / this.height) * 2 + 1
@@ -174,20 +180,20 @@ class View {
 		return new Vector2(pos.x, pos.y)
 	}
 
-	public world2Screen(coord: Vector2) {
+	world2Screen(coord: Vector2) {
 		const w = new Vector3(coord.x, coord.y, 0)
-		const ndc = w.project(this.camera)
+		const ndc = w.project(this.camera) // 世界坐标转换为NDC坐标
 		const left = Math.round(((ndc.x + 1) * this.width) / 2)
 		const top = Math.round(((-ndc.y + 1) * this.height) / 2)
 		return new Vector2(left, top)
 	}
 
-	public lonlat2Screen(lon: number, lat: number) {
+	lonlat2Screen(lon: number, lat: number) {
 		const world = this.lonlat2World(lon, lat)
 		return this.world2Screen(world)
 	}
 
-	public screen2Lonlat(left: number, top: number) {
+	screen2Lonlat(left: number, top: number) {
 		const world = this.screen2World(left, top)
 		return this.world2Lonlat(world)
 	}
@@ -200,8 +206,6 @@ class View {
 		const cameraHeight = calcCameraHeightFromZoom(defaultZoom, this.height, this.fov)
 
 		this.camera.position.set(centerWorld.x, centerWorld.y, cameraHeight)
-		//@ts-ignore
-		window.cam = this.camera
 		const controls = new OrbitControls(this.camera, props.controlCanvas)
 		controls.target.set(this.camera.position.x, this.camera.position.y, 0)
 		controls.mouseButtons.LEFT = MOUSE.PAN
@@ -211,6 +215,7 @@ class View {
 	}
 
 	/**
+	 * 根据屏幕高度计算fov
 	 * 以1000像素高度下45度fov为基准，计算任意屏幕高度下的fov。以达到不同屏幕高度下地图上物体相同的视觉比例
 	 * @param height 屏幕 像素高度
 	 * @returns 任意屏幕高度下的fov
@@ -218,12 +223,14 @@ class View {
 	private calcFov(height: number) {
 		const tanAlpha: number = Math.tan((45 * Math.PI) / 360)
 		let res = (Math.atan2(height, 1000 / tanAlpha) * 360) / Math.PI
-		console.log(res)
-		// res = 50.74
 		return res
 	}
 
+	/**
+	 * 当地图视角发生变化时，需要更新地图中心坐标和缩放级别，并通知 TileMap 更新地图视图。
+	 */
 	private onViewChange = () => {
+		//先算出当前 camera 下的分辨率，单位为米/像素，再根据分辨率计算 zoom 级别，最后更新地图中心坐标
 		const fovRad = (this.camera.fov * Math.PI) / 180
 		const resolution = (this.camera.position.z * Math.tan(fovRad / 2) * 2) / this.height
 

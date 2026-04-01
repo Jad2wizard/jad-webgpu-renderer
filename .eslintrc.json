@@ -19,6 +19,7 @@
 			"version": "detect"
 		}
 	},
+	"ignorePatterns": ["**/*.js"],
 	"rules": {
 		"prefer-const": "off",
 		"prettier/prettier": "error",

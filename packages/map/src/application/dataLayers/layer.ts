@@ -6,6 +6,7 @@ export type LabelFields = { labelFields?: { field: number; title: string[] } }
 export type StyleParams = Record<string, any>
 export type Data = (number | string)[][]
 
+// 数据图层接口
 export interface IDataLayer {
 	getId(): string
 	getSelected(): boolean
@@ -13,10 +14,10 @@ export interface IDataLayer {
 	getLevel(): number
 	getExtent(): Extent | null
 	updateData(data: Data, fields: LabelFields, style?: StyleParams): Promise<boolean>
-	updateStyle(style: StyleParams): Promise<boolean>
-	setSelected(setSelected: boolean): Promise<boolean>
-	setVisible(setVisible: boolean): Promise<boolean>
-	setLevel(setLevel: number): Promise<boolean>
+	updateStyle(style: StyleParams): boolean
+	setSelected(setSelected: boolean): boolean
+	setVisible(setVisible: boolean): boolean
+	setLevel(setLevel: number): boolean
 	onTimeUpdate(time: number): void
 	clearAll(): void
 	dispose(): void
@@ -31,6 +32,10 @@ export type IBaseLayerProps = {
 	map: GMap
 }
 
+/**
+ * 基础数据图层类
+ */
+export type LayerType = 'scatter' | 'path' | 'heatmap'
 export class BaseLayer {
 	protected id: string
 	protected selected: boolean

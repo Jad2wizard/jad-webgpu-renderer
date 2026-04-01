@@ -7,7 +7,7 @@ import XYZ from 'ol/source/XYZ'
 import OSM from 'ol/source/OSM'
 
 // 地球赤道上每度经度对应的米数（地球赤道周长 ÷ 360度）
-const METERS_PER_DEGREE_AT_EQUATOR = 111320
+// const METERS_PER_DEGREE_AT_EQUATOR = 111320
 
 export type TileLayer = OLTileLayer<WMTS> | OLTileLayer<XYZ> | OLTileLayer<OSM>
 
@@ -19,6 +19,9 @@ type IProps = {
 
 const defaultZoom = 7
 
+/**
+ * 瓦片地图类
+ */
 class TileMap {
 	private olMap: OlMap
 	private container: HTMLElement
@@ -34,21 +37,22 @@ class TileMap {
 				zoom: defaultZoom,
 				minZoom: 1,
 				maxZoom: 20,
-				projection: 'EPSG:3857',
+				projection: 'EPSG:3857', // 3857投影, 用于显示地图, 单位米。
 			}),
 			interactions: [],
-			controls: [], // 禁用所有默认控件（包括缩放控件）
+			controls: [], // 禁用所有默认控件（包括缩放控件）。视角由Camera 控制，并同步更新ol.view
 		})
-		//@ts-ignore
-		window.from = fromLonLat
 	}
 
+	/**
+	 * 获取地图的OpenLayers View对象
+	 */
 	get view() {
 		return this.olMap.getView()
 	}
 
 	// 获取地图中心的经纬度坐标
-	public getCenter() {
+	getCenter() {
 		const centerInMeter = this.view.getCenter()
 		if (!centerInMeter) {
 			return null
@@ -57,12 +61,16 @@ class TileMap {
 		return center
 	}
 
-	//获取单位米/像素的分辨率
-	public getResolution() {
+	// 获取单位米/像素的分辨率
+	getResolution() {
 		return this.view.getResolution()
 	}
 
-	public updateView(params: { center?: { lon: number; lat: number }; zoom?: number }) {
+	/**
+	 * 被动更新地图视角
+	 * @param params - 更新参数，包含中心坐标和缩放级别
+	 */
+	updateView(params: { center?: { lon: number; lat: number }; zoom?: number }) {
 		if (params.center) {
 			const center = fromLonLat([params.center.lon, params.center.lat])
 			this.view.setCenter(center)
@@ -72,8 +80,11 @@ class TileMap {
 		}
 	}
 
-	// 处理容器大小变化
-	public resize() {
+	/**
+	 * 处理容器大小变化
+	 * 当地图容器的父元素大小变化时，需要更新地图容器的尺寸，并通知 OpenLayers 地图更新尺寸。
+	 */
+	resize() {
 		// 更新容器尺寸
 		if (this.container && this.container.parentElement) {
 			const parentWidth = this.container.parentElement.offsetWidth

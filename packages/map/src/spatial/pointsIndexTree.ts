@@ -14,15 +14,15 @@ export class PointsIndexTree {
 	private tree?: KDTreeLike
 	private _maxPointRadius = 0
 
-	public getTree() {
+	getTree() {
 		return this.tree
 	}
 
-	public getMaxPointRadius() {
+	getMaxPointRadius() {
 		return this._maxPointRadius
 	}
 
-	public rebuildFromData(
+	rebuildFromData(
 		positions: Float32Array,
 		count: number,
 		defaultRadius: number,
@@ -47,7 +47,7 @@ export class PointsIndexTree {
 		this._maxPointRadius = maxR
 	}
 
-	public query(
+	query(
 		x: number,
 		y: number,
 		resolution: number,
@@ -102,7 +102,7 @@ export class PointsIndexTree {
 		return indices
 	}
 
-	public dispose() {
+	dispose() {
 		if (this.tree) {
 			this.tree.dispose()
 			this.tree = undefined
@@ -110,13 +110,7 @@ export class PointsIndexTree {
 		this._maxPointRadius = 0
 	}
 
-	public range(
-		minX: number,
-		minY: number,
-		maxX: number,
-		maxY: number,
-		visit: (index: number) => void
-	) {
+	range(minX: number, minY: number, maxX: number, maxY: number, visit: (index: number) => void) {
 		if (!this.tree) return
 		this.tree.range([minX, minY], [maxX, maxY], visit)
 	}

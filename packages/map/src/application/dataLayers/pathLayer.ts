@@ -68,19 +68,19 @@ class PathLayer extends BaseLayer implements IDataLayer {
 
 	setSelected(selected: boolean) {
 		this.selected = selected
-		return Promise.resolve(true)
+		return true
 	}
 
 	setVisible(visible: boolean) {
 		this.visible = visible
 		if (this.paths) this.paths.visible = visible
-		return Promise.resolve(true)
+		return true
 	}
 
 	setLevel(level: number) {
 		this.level = level
 		if (this.paths) this.paths.renderOrder = level
-		return Promise.resolve(true)
+		return true
 	}
 
 	pickBox(minX: number, minY: number, maxX: number, maxY: number, resolution: number): number[] {
@@ -135,13 +135,13 @@ class PathLayer extends BaseLayer implements IDataLayer {
 		if (!pathIds) {
 			this.style = _.merge(this.style, style)
 		}
-		if (!this.paths) return Promise.resolve(false)
+		if (!this.paths) return false
 		this.paths.setStyle(style as StyleType, pathIds)
-		return Promise.resolve(true)
+		return true
 	}
 
 	onTimeUpdate(time: number): void {
-		if (this.paths && this.fields.startTime) {
+		if (this.paths && this.fields.startTime !== undefined) {
 			this.paths.updateCurrentTime(time / 1000 - this.startTime)
 		}
 	}
@@ -193,9 +193,10 @@ class PathLayer extends BaseLayer implements IDataLayer {
 			minLat = Math.min(minLat, extent.s)
 			maxLat = Math.max(maxLat, extent.n)
 
-			const startTimes = !!this.fields.startTime ? new Float32Array(len) : undefined
+			const startTimes =
+				this.fields.startTime !== undefined ? new Float32Array(len) : undefined
 
-			if (this.fields.startTime && startTimes) {
+			if (this.fields.startTime !== undefined && startTimes) {
 				for (let i = 0; i < len; i++) {
 					const row = rows[i]
 					const st = Number(row[this.fields.startTime]) / 1000
@@ -203,7 +204,7 @@ class PathLayer extends BaseLayer implements IDataLayer {
 				}
 			}
 
-			if (this.fields.startTime && startTimes) {
+			if (this.fields.startTime !== undefined && startTimes) {
 				for (let i = 0; i < len; i++) {
 					const row = rows[i]
 					const st = Number(row[this.fields.startTime as number]) / 1000

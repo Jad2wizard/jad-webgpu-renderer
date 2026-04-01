@@ -9,7 +9,6 @@
 		"baseUrl": ".",
 		"paths": {
 			"@map/*": ["src/*"],
-			"@renderer/*": ["../renderer/src/*"],
 			"@webgpu-gmap/renderer": ["../renderer/src/index.ts"]
 		},
 		"jsx": "react-jsx",

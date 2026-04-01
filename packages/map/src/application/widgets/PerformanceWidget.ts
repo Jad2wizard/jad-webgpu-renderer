@@ -55,7 +55,7 @@ export default class PerformanceWidget {
 		this.dom.innerHTML = text
 	}
 
-	public dispose() {
+	dispose() {
 		if (this.timer) {
 			clearInterval(this.timer)
 		}

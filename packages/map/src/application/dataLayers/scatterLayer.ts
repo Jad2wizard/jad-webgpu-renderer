@@ -71,19 +71,19 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 
 	setSelected(selected: boolean) {
 		this.selected = selected
-		return Promise.resolve(true)
+		return true
 	}
 
 	setVisible(visible: boolean) {
 		this.visible = visible
 		if (this.points) this.points.visible = visible
-		return Promise.resolve(true)
+		return true
 	}
 
 	setLevel(level: number) {
 		this.level = level
 		if (this.points) this.points.renderOrder = level
-		return Promise.resolve(true)
+		return true
 	}
 
 	async updateData(data: Data, _fields?: LabelFields, style?: StyleParams) {
@@ -151,7 +151,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		return true
 	}
 
-	public buildIndexTree() {
+	buildIndexTree() {
 		if (!this.points || this.currentCount === 0) return
 
 		const positionAttr = this.points.geometry.getAttribute('position')
@@ -178,7 +178,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		const tree = this.indexTree.getTree()
 		if (tree) {
 			const sortedPositions = tree.points.data
-			const ids = tree.ids
+			const ids = tree.ids //kdtree.ids记录了 kdtree.points 中的点在原始数据中的索引
 			const count = this.currentCount
 
 			// 重用 kdtree.points 作为 position attribute
@@ -235,6 +235,7 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 				radiusStorage.updateValue(newRadiuses)
 			}
 
+			//因为现在geometry的 position attribute 与 kdtree.points相同，都是 kdtree 构建时排序后的结果。所以需要保留 ids  记录点在原始数据中的索引
 			this.treeIds = new Int32Array(ids)
 			// 将 kdtree.points与 geometry的 position 共享 buffer，以及重排序其它 attributes 之后
 			// tree.ids 就变成了简单的递增数组，失去了作为kdtree.points原始数据的索引的意义，故删掉
@@ -249,17 +250,17 @@ class ScatterLayer extends BaseLayer implements IDataLayer {
 		if (!pointIndices) {
 			this.style = _.merge(this.style, style)
 		}
-		if (!this.points) return Promise.resolve(false)
+		if (!this.points) return false
 		const pointsStyle: { color?: Color; radius?: number; blending?: Blending } = {}
 		if (style.color) pointsStyle.color = style.color
 		if (style.radius) pointsStyle.radius = style.radius
 		if (style.blending) pointsStyle.blending = style.blending
 		this.points.setStyle(pointsStyle, pointIndices)
-		return Promise.resolve(true)
+		return true
 	}
 
 	onTimeUpdate(time: number): void {
-		if (this.points && this.fields.startTime) {
+		if (this.points && this.fields.startTime !== undefined) {
 			this.points.updateCurrentTime(time / 1000 - this.startTime)
 		}
 	}

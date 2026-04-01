@@ -101,7 +101,7 @@ class GMap extends EventEmitter {
 		this._layerManager.removeLayer(layerId)
 	}
 
-	public checkAutoFit() {
+	checkAutoFit() {
 		if (!this.autoFit) return
 		if (this.autoFitTimer) {
 			clearTimeout(this.autoFitTimer)
@@ -112,7 +112,7 @@ class GMap extends EventEmitter {
 		}, 100)
 	}
 
-	public fitView() {
+	fitView() {
 		const layers = this._layerManager.getAllLayers()
 		if (layers.length === 0) return
 

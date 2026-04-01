@@ -38,19 +38,19 @@ class Renderer {
 		return this._canvas
 	}
 
-	public render(scene: Scene, camera: Camera) {
+	render(scene: Scene, camera: Camera) {
 		if (this._renderer) {
 			this._renderer.render(scene, camera)
 		}
 	}
 
-	public resize() {
+	resize() {
 		if (this._renderer) {
 			this._renderer.resize()
 		}
 	}
 
-	public dispose(parentElement: HTMLElement) {
+	dispose(parentElement: HTMLElement) {
 		parentElement.removeChild(this._canvas)
 	}
 
