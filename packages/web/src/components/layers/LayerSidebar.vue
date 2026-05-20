@@ -69,7 +69,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Delete, UploadFilled } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useMapStore } from '@/stores/map'
 import { uploadDataset, createLayer, deleteLayer, updateLayer, fetchDatasetData } from '@/utils/api'
@@ -83,6 +85,8 @@ import type {
 } from '@shared/types'
 
 const mapStore = useMapStore()
+const route = useRoute()
+const projectId = computed(() => route.params.id as string)
 
 function typeIcon(type: string) {
 	return type === 'scatter' ? '●' : type === 'path' ? '〰' : '◉'

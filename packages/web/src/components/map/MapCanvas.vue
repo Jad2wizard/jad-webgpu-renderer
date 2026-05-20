@@ -34,7 +34,7 @@ watch(
 	async (config) => {
 		if (config && el.value) {
 			try {
-				await initMap(el.value, config)
+				await initMap(el.value, config, props.projectId)
 				ready.value = true
 			} catch (err) {
 				console.error('Map init failed:', err)

@@ -90,7 +90,7 @@ export function useChat(projectId: string) {
 								break
 							}
 							case 'done':
-								currentSessionId.value = currentSessionId.value
+								if (data.sessionId) currentSessionId.value = data.sessionId
 								break
 							case 'error':
 								assistantMsg.content += `\n\n> ⚠️ ${event.message}`

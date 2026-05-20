@@ -15,7 +15,7 @@ export function useGMap() {
 	/**
 	 * 初始化 WebGPU 地图实例
 	 */
-	async function initMap(container: HTMLDivElement, config: MapConfig) {
+	async function initMap(container: HTMLDivElement, config: MapConfig, projectId: string) {
 		if (initialized.value) return
 
 		// 动态导入 map 包
@@ -45,7 +45,7 @@ export function useGMap() {
 
 		// 3. 批量创建数据图层
 		await createLayersFromConfig(gmap, config, async (datasetId) => {
-			const result = await fetchDatasetData(datasetId)
+			const result = await fetchDatasetData(projectId, datasetId)
 			return result.data
 		})
 

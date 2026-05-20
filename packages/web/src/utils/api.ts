@@ -77,8 +77,8 @@ export function uploadDataset(projectId: string, file: File, name?: string) {
 	})
 }
 
-export function fetchDatasetData(datasetId: string) {
-	return api<DatasetData>(`/projects/_/datasets/${datasetId}/data`)
+export function fetchDatasetData(projectId: string, datasetId: string) {
+	return api<DatasetData>(`/projects/${projectId}/datasets/${datasetId}/data`)
 }
 
 // ---- 对话 ----

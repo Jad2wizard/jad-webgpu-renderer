@@ -17,6 +17,7 @@ export const useMapStore = defineStore('map', () => {
 	const config = ref<MapConfig | null>(null)
 	const selectedLayerId = ref<string | null>(null)
 	const isUploading = ref(false)
+	const chatPanelOpen = ref(false)
 
 	// ---- 计算属性 ----
 	const layers = computed(() => config.value?.layers ?? [])
@@ -81,6 +82,7 @@ export const useMapStore = defineStore('map', () => {
 		config,
 		selectedLayerId,
 		isUploading,
+		ttchatPanelOpen,
 		layers,
 		selectedLayer,
 		selectLayer,

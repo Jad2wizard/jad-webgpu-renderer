@@ -15,3 +15,7 @@ export const config = {
 	packageRoot: resolve(__dirname, '..'),
 	clientDistDir: resolve(__dirname, '../dist/client'),
 } as const
+
+if (!process.env.DEEPSEEK_API_KEY) {
+	console.warn('[server] 未设置 DEEPSEEK_API_KEY，AI 助手功能将不可用')
+}

@@ -39,8 +39,7 @@ export function initDb(): ReturnType<typeof drizzle<typeof schema>> {
 
 	_db = drizzle(sqlite, { schema })
 
-	// 自动建表（开发阶段使用，生产应使用 drizzle-kit migrate）
-	createTablesIfNotExists(sqlite)
+	// 开发阶段使用 drizzle-kit push 建表，生产使用 drizzle-kit migrate
 
 	return _db
 }

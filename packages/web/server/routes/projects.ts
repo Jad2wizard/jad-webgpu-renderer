@@ -121,6 +121,7 @@ router.put('/projects/:id', auth, async (req: Request, res: Response) => {
 	if (req.body.tileConfig !== undefined) updates.tileConfig = JSON.stringify(req.body.tileConfig)
 
 	if (Object.keys(updates).length > 0) {
+		updates.updatedAt = new Date().toISOString()
 		await db().update(projects).set(updates).where(eq(projects.id, req.params.id))
 	}
 

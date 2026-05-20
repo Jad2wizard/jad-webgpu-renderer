@@ -178,7 +178,9 @@ export async function* runAgent(
 							? event.data.output
 							: JSON.stringify(event.data.output)
 					// 更新最后一个 matching tool_call 的 result
-					const last = toolCalls.findLast((tc) => tc.name === event.name && !tc.result)
+					const last = [...toolCalls]
+						.reverse()
+						.find((tc) => tc.name === event.name && !tc.result)
 					if (last) last.result = result
 					yield { type: 'tool_result', tool: event.name, result }
 					// 通知前端配置已变更
@@ -206,7 +208,7 @@ export async function* runAgent(
 				role: 'assistant',
 				content: fullContent,
 				toolCalls: JSON.stringify(toolCalls),
-				createdAt: new Date(Date.now() + 1).toISOString(),
+				createdAt: new Date().toISOString(),
 			})
 
 		// 更新 session 的 updatedAt
@@ -215,7 +217,7 @@ export async function* runAgent(
 			.set({ updatedAt: now })
 			.where(eq(chatSessions.id, sessionId))
 
-		yield { type: 'done', content: fullContent, toolCalls }
+		yield { type: 'done', content: fullContent, toolCalls, sessionId }
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err)
 		console.error('Agent run error:', message)
