@@ -14,8 +14,7 @@
 		"declaration": false,
 		"paths": {
 			"@/*": ["./src/*"],
-			"@shared/*": ["./shared/*"],
-			"@webgpu-gmap/map": ["../map/lib/application/index.js"]
+			"@shared/*": ["./shared/*"]
 		},
 		"baseUrl": ".",
 		"outDir": "dist/client"
