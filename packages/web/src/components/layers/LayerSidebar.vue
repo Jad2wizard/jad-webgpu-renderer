@@ -72,7 +72,8 @@
 import { Delete, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useMapStore } from '@/stores/map'
-import { uploadDataset, createLayer, deleteLayer, updateLayer } from '@/utils/api'
+import { uploadDataset, createLayer, deleteLayer, updateLayer, fetchDatasetData } from '@/utils/api'
+import { createLayersFromConfig } from '@/utils/applyConfig'
 import StyleEditor from './StyleEditor.vue'
 import type {
 	LayerConfig,
@@ -136,16 +137,6 @@ async function handleUpload(file: any) {
 
 		// 添加到 store
 		mapStore.config?.layers.push(layerData.layer as any)
-
-		// 在地图上渲染
-		const g = mapStore.gmapInstance
-		if (g) {
-			const dataset = await import('@/utils/api').then((m) =>
-				m.fetchDatasetData(result.dataset.id)
-			)
-			const mod = await import('@/utils/applyConfig')
-			// TODO: 调用 add*Layer 函数动态添加图层
-		}
 
 		ElMessage.success(`上传成功：${result.dataset.featureCount} 条数据`)
 	} catch (err: any) {

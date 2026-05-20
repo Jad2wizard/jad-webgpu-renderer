@@ -12,6 +12,8 @@ export default defineConfig({
 		alias: {
 			'@': resolve(__dirname, 'src'),
 			'@shared': resolve(__dirname, 'shared'),
+			// map 包的 main 指向 lib/index.js 但实际出口在 lib/application/index.js
+			'@webgpu-gmap/map': resolve(__dirname, '../map/lib/application/index.js'),
 		},
 	},
 	server: {

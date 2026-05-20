@@ -10,14 +10,7 @@
 							<el-icon><UserFilled /></el-icon>
 						</el-button>
 						<template #dropdown>
-							<el-dropdown-item
-								@click="
-									auth.logout()
-									router.push('/login')
-								"
-							>
-								退出登录
-							</el-dropdown-item>
+							<el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
 						</template>
 					</el-dropdown>
 				</div>
@@ -105,5 +98,9 @@ async function handleCreate() {
 	} finally {
 		creating.value = false
 	}
+}
+function handleLogout() {
+	auth.logout()
+	router.push('/login')
 }
 </script>
