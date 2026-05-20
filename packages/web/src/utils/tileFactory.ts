@@ -5,7 +5,7 @@ import type { TileConfig } from '@shared/types'
 /**
  * 根据 TileConfig 创建 OpenLayers 瓦片图层
  */
-export function createTileLayer(config: TileConfig): TileLayer {
+export function createTileLayer(config: TileConfig): TileLayer<any> {
 	let source: XYZ | OSM
 
 	switch (config.type) {

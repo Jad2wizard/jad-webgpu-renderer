@@ -1,24 +1,24 @@
 {
 	"compilerOptions": {
-		"target": "ES2020",
+		"target": "ES2022",
 		"module": "ESNext",
-		"moduleResolution": "bundler",
+		"moduleResolution": "node",
 		"strict": true,
 		"noImplicitAny": true,
 		"strictNullChecks": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"jsx": "preserve",
-		"jsxImportSource": "vue",
 		"sourceMap": true,
+		"lib": ["dom", "dom.iterable", "es2022"],
 		"declaration": false,
 		"paths": {
 			"@/*": ["./src/*"],
-			"@shared/*": ["./shared/*"]
+			"@shared/*": ["./shared/*"],
+			"@webgpu-gmap/map": ["../map/lib/application/index.js"]
 		},
 		"baseUrl": ".",
 		"outDir": "dist/client"
 	},
-	"include": ["src/**/*.ts", "src/**/*.vue", "shared/**/*.ts"],
-	"references": [{ "path": "./tsconfig.node.json" }]
+	"include": ["src/**/*.ts", "src/**/*.vue", "shared/**/*.ts"]
 }

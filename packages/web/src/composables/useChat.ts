@@ -79,7 +79,14 @@ export function useChat(projectId: string) {
 								break
 							case 'config_changed': {
 								const fresh = await fetchProject(projectId)
-								mapStore.refreshFromConfig(fresh.project)
+								const p = fresh.project
+								mapStore.refreshFromConfig({
+									version: 1,
+									viewport: p.viewport,
+									tile: p.tileConfig,
+									layers: p.layers,
+									interaction: { boxSelect: { enabled: true, key: 'ctrl' } },
+								})
 								break
 							}
 							case 'done':
