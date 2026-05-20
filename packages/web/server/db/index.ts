@@ -1,23 +1,23 @@
-import Database from "better-sqlite3"
-import { drizzle } from "drizzle-orm/better-sqlite3"
-import * as schema from "./schema"
-import { resolve, dirname } from "path"
-import { mkdirSync } from "fs"
-import { fileURLToPath } from "url"
+import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import * as schema from './schema'
+import { resolve, dirname } from 'path'
+import { mkdirSync } from 'fs'
+import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 // 项目根目录 (packages/web)
-const PACKAGE_ROOT = resolve(__dirname, "../..")
+const PACKAGE_ROOT = resolve(__dirname, '../..')
 
 function getDbPath(): string {
-  const url = process.env.DATABASE_URL || "./data/gmap.db"
-  // 相对路径转为基于 package root 的绝对路径
-  if (url.startsWith("./") || url.startsWith("../")) {
-    return resolve(PACKAGE_ROOT, url)
-  }
-  return url
+	const url = process.env.DATABASE_URL || './data/gmap.db'
+	// 相对路径转为基于 package root 的绝对路径
+	if (url.startsWith('./') || url.startsWith('../')) {
+		return resolve(PACKAGE_ROOT, url)
+	}
+	return url
 }
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null
@@ -26,23 +26,23 @@ let _db: ReturnType<typeof drizzle<typeof schema>> | null = null
  * 初始化数据库连接并执行迁移
  */
 export function initDb(): ReturnType<typeof drizzle<typeof schema>> {
-  if (_db) return _db
+	if (_db) return _db
 
-  const dbPath = getDbPath()
-  const dbDir = dirname(dbPath)
-  mkdirSync(dbDir, { recursive: true })
+	const dbPath = getDbPath()
+	const dbDir = dirname(dbPath)
+	mkdirSync(dbDir, { recursive: true })
 
-  const sqlite = new Database(dbPath)
-  // 启用 WAL 模式提升并发读性能
-  sqlite.pragma("journal_mode = WAL")
-  sqlite.pragma("foreign_keys = ON")
+	const sqlite = new Database(dbPath)
+	// 启用 WAL 模式提升并发读性能
+	sqlite.pragma('journal_mode = WAL')
+	sqlite.pragma('foreign_keys = ON')
 
-  _db = drizzle(sqlite, { schema })
+	_db = drizzle(sqlite, { schema })
 
-  // 自动建表（开发阶段使用，生产应使用 drizzle-kit migrate）
-  createTablesIfNotExists(sqlite)
+	// 自动建表（开发阶段使用，生产应使用 drizzle-kit migrate）
+	createTablesIfNotExists(sqlite)
 
-  return _db
+	return _db
 }
 
 /**
@@ -50,7 +50,7 @@ export function initDb(): ReturnType<typeof drizzle<typeof schema>> {
  * 生产环境应使用 drizzle-kit push 或 drizzle-kit migrate
  */
 function createTablesIfNotExists(sqlite: Database.Database) {
-  sqlite.exec(`
+	sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
@@ -125,8 +125,8 @@ function createTablesIfNotExists(sqlite: Database.Database) {
  * 获取数据库实例（必须在 initDb() 之后调用）
  */
 export function db(): ReturnType<typeof drizzle<typeof schema>> {
-  if (!_db) {
-    return initDb()
-  }
-  return _db
+	if (!_db) {
+		return initDb()
+	}
+	return _db
 }

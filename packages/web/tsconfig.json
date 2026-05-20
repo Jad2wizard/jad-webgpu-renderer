@@ -1,24 +1,24 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "jsx": "preserve",
-    "jsxImportSource": "vue",
-    "sourceMap": true,
-    "declaration": false,
-    "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["./shared/*"]
-    },
-    "baseUrl": ".",
-    "outDir": "dist/client"
-  },
-  "include": ["src/**/*.ts", "src/**/*.vue", "shared/**/*.ts"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+	"compilerOptions": {
+		"target": "ES2020",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"jsx": "preserve",
+		"jsxImportSource": "vue",
+		"sourceMap": true,
+		"declaration": false,
+		"paths": {
+			"@/*": ["./src/*"],
+			"@shared/*": ["./shared/*"]
+		},
+		"baseUrl": ".",
+		"outDir": "dist/client"
+	},
+	"include": ["src/**/*.ts", "src/**/*.vue", "shared/**/*.ts"],
+	"references": [{ "path": "./tsconfig.node.json" }]
 }
