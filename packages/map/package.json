@@ -2,10 +2,10 @@
 	"name": "@webgpu-gmap/map",
 	"version": "0.1.0",
 	"description": "a map component",
-	"main": "lib/index.js",
-	"types": "typings/index.d.ts",
+	"main": "lib/application/index.js",
+	"types": "typings/application/index.d.ts",
 	"scripts": {
-		"start": "webpack serve",
+		"start": "webpack serve --config webpack.demo.config.js",
 		"build": "npm run clear-output && tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
 		"build:iife": "node esbuild.config.js",
 		"test": "echo \"Error: no test specified\" && exit 1",

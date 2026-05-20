@@ -21,8 +21,6 @@ module.exports = {
 		alias: {
 			'@': path.resolve(__dirname, 'src'),
 			'@shared': path.resolve(__dirname, 'shared'),
-			// map 包的 main 指向不存在的 lib/index.js，需要显式指定入口
-			'@webgpu-gmap/map': path.resolve(__dirname, '../map/lib/application/index.js'),
 		},
 	},
 	module: {
