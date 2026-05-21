@@ -17,15 +17,22 @@ const customFetch: typeof fetch = async (url, init) => {
 		try {
 			const body = JSON.parse(init.body)
 			if (body.messages) {
-				const reasoningMap = (model as any)._reasoningMap
-				if (reasoningMap?.size) {
-					for (const msg of body.messages) {
-						if (msg.role === 'assistant') {
-							const rc = reasoningMap.get(msg.content)
+				// 尝试索引匹配注入 reasoning_content
+				const reasoningArr = (model as any)._reasoningArr as (string | null)[]
+				if (reasoningArr?.length) {
+					let arrIdx = 0
+					for (let i = 0; i < body.messages.length; i++) {
+						const msg = body.messages[i]
+						// 跳过 system 消息，它们不计入 reasoning 索引
+						while (arrIdx < reasoningArr.length && reasoningArr[arrIdx] === undefined) {
+							arrIdx++
+						}
+						if (msg.role === 'assistant' && arrIdx < reasoningArr.length) {
+							const rc = reasoningArr[arrIdx]
 							if (rc) {
 								msg.reasoning_content = rc
-								reasoningMap.delete(msg.content)
 							}
+							arrIdx++
 						}
 					}
 				}
@@ -75,15 +82,12 @@ if (_origStream) {
 		options: any,
 		runManager: any
 	) {
-		// 记录 content → reasoning_content 映射，供 customFetch 注入
-		const map = new Map<string, string>()
-		for (const msg of messages) {
+		// 按索引记录 reasoning_content（比 content 匹配更可靠）
+		const reasoningArr: (string | null)[] = messages.map((msg) => {
 			const rc = (msg as any).additional_kwargs?.reasoning_content
-			if (rc && msg.content) {
-				map.set(String(msg.content), rc)
-			}
-		}
-		;(model as any)._reasoningMap = map
+			return rc || null
+		})
+		;(model as any)._reasoningArr = reasoningArr
 		yield* _origStream(messages, options, runManager)
 	}
 }
