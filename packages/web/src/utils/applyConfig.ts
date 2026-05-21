@@ -1,6 +1,5 @@
 import type {
 	MapConfig,
-	LayerConfig,
 	ScatterLayerConfig,
 	ScatterStyleConfig,
 	PathLayerConfig,
@@ -11,10 +10,7 @@ import type {
 type GMap = any
 
 /**
- * 为每个图层创建对应的 GMap 图层（从配置 + 已解析数据）
- *
- * 注意：map 包的 GMap.addLayer 需要 column-index-based fields，
- * 而 config 中存储的是有名字段。这里做转换。
+ * 为每个图层创建对应的 GMap 图层并传入数据
  */
 export async function createLayersFromConfig(
 	gmap: GMap,
@@ -23,27 +19,35 @@ export async function createLayersFromConfig(
 ) {
 	for (const lc of config.layers) {
 		const data = await getData(lc.datasetId)
+		if (!data.length) continue
 
+		let layer: any
 		switch (lc.type) {
 			case 'scatter':
-				addScatterLayer(gmap, lc, data)
+				layer = addScatterLayer(gmap, lc, data)
 				break
 			case 'path':
-				addPathLayer(gmap, lc, data)
+				layer = addPathLayer(gmap, lc, data)
 				break
 			case 'heatmap':
-				addHeatmapLayer(gmap, lc, data)
+				layer = addHeatmapLayer(gmap, lc, data)
 				break
+		}
+
+		// 关键：调用 updateData 将顶点数据写入 GPU 缓冲区
+		if (layer) {
+			await layer.updateData(data)
+			if (lc.type === 'scatter' && layer.buildIndexTree) {
+				layer.buildIndexTree()
+			}
 		}
 	}
 }
 
-function addScatterLayer(gmap: GMap, config: ScatterLayerConfig, _data: (number | string)[][]) {
+function addScatterLayer(gmap: GMap, config: ScatterLayerConfig, data: (number | string)[][]) {
 	const { fields, style } = config
-	const getColor = buildColorCallback(style)
-	const getRadius = buildRadiusCallback(style)
 
-	const layer = gmap.addLayer(config.id, 'scatter', {
+	return gmap.addLayer(config.id, 'scatter', {
 		fields: {
 			lon: fields.lonField,
 			lat: fields.latField,
@@ -56,18 +60,16 @@ function addScatterLayer(gmap: GMap, config: ScatterLayerConfig, _data: (number 
 			highlighting: style.highlight,
 			blending: style.blending,
 		},
-		getColor,
-		getRadius,
-		total: _data.length,
+		getColor: buildColorCallback(style),
+		getRadius: buildRadiusCallback(style),
+		total: data.length,
 	})
-
-	return layer
 }
 
-function addPathLayer(gmap: GMap, config: PathLayerConfig, _data: (number | string)[][]) {
+function addPathLayer(gmap: GMap, config: PathLayerConfig, data: (number | string)[][]) {
 	const { fields, style } = config
 
-	const layer = gmap.addLayer(config.id, 'path', {
+	return gmap.addLayer(config.id, 'path', {
 		fields: {
 			pathId: fields.pathIdField,
 			lon: fields.lonField,
@@ -87,14 +89,12 @@ function addPathLayer(gmap: GMap, config: PathLayerConfig, _data: (number | stri
 			blending: style.blending,
 		},
 	})
-
-	return layer
 }
 
-function addHeatmapLayer(gmap: GMap, config: HeatmapLayerConfig, _data: (number | string)[][]) {
+function addHeatmapLayer(gmap: GMap, config: HeatmapLayerConfig, data: (number | string)[][]) {
 	const { fields, style } = config
 
-	const layer = gmap.addLayer(config.id, 'heatmap', {
+	return gmap.addLayer(config.id, 'heatmap', {
 		fields: {
 			lon: fields.lonField,
 			lat: fields.latField,
@@ -107,10 +107,8 @@ function addHeatmapLayer(gmap: GMap, config: HeatmapLayerConfig, _data: (number 
 			radius: style.radius,
 			blending: style.blending,
 		},
-		total: _data.length,
+		total: data.length,
 	})
-
-	return layer
 }
 
 function buildColorCallback(style: ScatterStyleConfig) {
