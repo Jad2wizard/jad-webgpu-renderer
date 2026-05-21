@@ -130,6 +130,7 @@ export const chatMessages = sqliteTable(
 			.references(() => chatSessions.id, { onDelete: 'cascade' }),
 		role: text('role').notNull(),
 		content: text('content').notNull().default(''),
+		reasoningContent: text('reasoning_content'),
 		toolCalls: text('tool_calls'),
 		createdAt: text('created_at')
 			.notNull()

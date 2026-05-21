@@ -44,9 +44,10 @@ export function initDb(): ReturnType<typeof drizzle<typeof schema>> {
 	// 安全迁移：忽略"列已存在"错误
 	try {
 		sqlite.exec('ALTER TABLE datasets ADD COLUMN property_fields TEXT')
-	} catch (_e) {
-		// 列已存在，跳过
-	}
+	} catch (_e) { /* 列已存在 */ }
+	try {
+		sqlite.exec('ALTER TABLE chat_messages ADD COLUMN reasoning_content TEXT')
+	} catch (_e) { /* 列已存在 */ }
 
 	return _db
 }

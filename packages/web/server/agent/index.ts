@@ -10,15 +10,83 @@ import { config } from '../config'
 
 // ---- 模型 ----
 
+// 自定义 fetch：注入 reasoning_content 到 assistant 消息中（DeepSeek thinking mode 要求）
+const _origFetch = globalThis.fetch
+const customFetch: typeof fetch = async (url, init) => {
+	if (init?.body && typeof init.body === 'string') {
+		try {
+			const body = JSON.parse(init.body)
+			if (body.messages) {
+				const reasoningMap = (model as any)._reasoningMap
+				if (reasoningMap?.size) {
+					for (const msg of body.messages) {
+						if (msg.role === 'assistant') {
+							const rc = reasoningMap.get(msg.content)
+							if (rc) {
+								msg.reasoning_content = rc
+								reasoningMap.delete(msg.content)
+							}
+						}
+					}
+				}
+				init = { ...init, body: JSON.stringify(body) }
+			}
+		} catch { /* JSON 解析失败则保持原样 */ }
+	}
+	return _origFetch(url, init)
+}
+
 const model = new ChatOpenAI({
-	model: config.deepseekModel,
-	apiKey: config.deepseekApiKey,
+	model: config.openaiModel,
+	apiKey: config.openaiApiKey,
 	configuration: {
-		baseURL: config.deepseekBaseUrl,
+		baseURL: config.openaiBaseUrl,
+		fetch: customFetch,
 	},
 	temperature: 0.3,
 	maxTokens: 4096,
 })
+
+// ---- 兼容 DeepSeek thinking mode：捕获并回传 reasoning_content ----
+
+// 1. 从 API 响应 delta 中捕获 reasoning_content
+const _origConvertDelta = (model as any)._convertOpenAIDeltaToBaseMessageChunk?.bind(model)
+if (_origConvertDelta) {
+	;(model as any)._convertOpenAIDeltaToBaseMessageChunk = function (
+		delta: Record<string, any>,
+		rawResponse: any,
+		defaultRole?: any
+	) {
+		const chunk = _origConvertDelta(delta, rawResponse, defaultRole)
+		if (delta.reasoning_content) {
+			chunk.additional_kwargs ??= {}
+			chunk.additional_kwargs.reasoning_content =
+				(chunk.additional_kwargs.reasoning_content || '') + delta.reasoning_content
+		}
+		return chunk
+	}
+}
+
+// 2. 拦截 _streamResponseChunks + 自定义 fetch 注入 reasoning_content
+const _origStream = (model as any)._streamResponseChunks?.bind(model)
+if (_origStream) {
+	;(model as any)._streamResponseChunks = async function* (
+		messages: BaseMessage[],
+		options: any,
+		runManager: any
+	) {
+		// 记录 content → reasoning_content 映射，供 customFetch 注入
+		const map = new Map<string, string>()
+		for (const msg of messages) {
+			const rc = (msg as any).additional_kwargs?.reasoning_content
+			if (rc && msg.content) {
+				map.set(String(msg.content), rc)
+			}
+		}
+		;(model as any)._reasoningMap = map
+		yield* _origStream(messages, options, runManager)
+	}
+}
 
 // ---- System Prompt ----
 
@@ -79,9 +147,16 @@ async function loadChatHistory(sessionId: string): Promise<BaseMessage[]> {
 		.orderBy(asc(chatMessagesTable.createdAt))
 		.all()
 
-	return messages.map((m) => {
+	return messages.map((m: any) => {
 		if (m.role === 'user') return new HumanMessage(m.content)
-		if (m.role === 'assistant') return new AIMessage(m.content)
+		if (m.role === 'assistant') {
+			return new AIMessage({
+				content: m.content,
+				additional_kwargs: m.reasoningContent
+					? { reasoning_content: m.reasoningContent }
+					: {},
+			})
+		}
 		return new HumanMessage(m.content)
 	})
 }
@@ -128,6 +203,7 @@ export async function* runAgent(
 
 	// 3. 流式执行
 	let fullContent = ''
+	let reasoningContent = ''
 	const toolCalls: Array<{ name: string; args: Record<string, unknown>; result?: string }> = []
 
 	try {
@@ -140,6 +216,10 @@ export async function* runAgent(
 			switch (event.event) {
 				case 'on_chat_model_stream': {
 					const chunk = event.data.chunk
+					// 捕获 DeepSeek thinking mode 的 reasoning_content
+					if ((chunk as any).additional_kwargs?.reasoning_content) {
+						reasoningContent += (chunk as any).additional_kwargs.reasoning_content
+					}
 					if (chunk.content) {
 						const text = typeof chunk.content === 'string' ? chunk.content : ''
 						fullContent += text
@@ -207,6 +287,7 @@ export async function* runAgent(
 				sessionId,
 				role: 'assistant',
 				content: fullContent,
+				reasoningContent: reasoningContent || null,
 				toolCalls: JSON.stringify(toolCalls),
 				createdAt: new Date().toISOString(),
 			})

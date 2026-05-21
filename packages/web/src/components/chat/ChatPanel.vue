@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import { Close, Loading } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { useChat } from '@/composables/useChat'
@@ -107,4 +107,8 @@ async function handleSend() {
 function handleNewChat() {
 	chat.reset()
 }
+
+onMounted(() => {
+	chat.restoreSession()
+})
 </script>

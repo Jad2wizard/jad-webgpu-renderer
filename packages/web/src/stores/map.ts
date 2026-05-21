@@ -118,18 +118,28 @@ export const useMapStore = defineStore('map', () => {
 
 	// ---- Agent 修改后全量刷新配置（收到 config_changed 事件时调用） ----
 	function refreshFromConfig(newConfig: MapConfig) {
+		const prevConfig = config.value
 		config.value = newConfig
 		const g = gmapInstance.value as any
 		if (!g) return
 
-		// 视口
-		const vp = newConfig.viewport
-		g.view.setCenter([vp.center[0], vp.center[1]])
-		g.view.setZoom(vp.zoom)
+		// 仅当视口实际变更时才更新相机（避免纯样式修改时重置 zoom）
+		const newVp = newConfig.viewport
+		const prevVp = prevConfig?.viewport
+		const vpChanged =
+			!prevVp ||
+			prevVp.center[0] !== newVp.center[0] ||
+			prevVp.center[1] !== newVp.center[1] ||
+			prevVp.zoom !== newVp.zoom
+
+		if (vpChanged) {
+			g.view.setCenter([newVp.center[0], newVp.center[1]])
+			g.view.setZoom(newVp.zoom)
+		}
 
 		// 图层变更
 		const newIds = new Set(newConfig.layers.map((l) => l.id))
-		for (const oldLayer of config.value?.layers ?? []) {
+		for (const oldLayer of prevConfig?.layers ?? []) {
 			if (!newIds.has(oldLayer.id)) g.removeLayer(oldLayer.id)
 		}
 		for (const lc of newConfig.layers) {

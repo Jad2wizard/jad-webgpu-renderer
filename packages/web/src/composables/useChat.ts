@@ -1,9 +1,10 @@
 import { ref } from 'vue'
 import { ofetch } from 'ofetch'
 import { useMapStore } from '@/stores/map'
-import { fetchProject, fetchChatMessages } from '@/utils/api'
+import { fetchProject, fetchChatMessages, fetchChatSessions } from '@/utils/api'
 
 const apiBase = '/api'
+const SESSION_KEY = 'chat_current_session'
 
 function authHeaders(): Record<string, string> {
 	const token = localStorage.getItem('token')
@@ -101,7 +102,10 @@ export function useChat(projectId: string) {
 								break
 							}
 							case 'done':
-								if (data.sessionId) currentSessionId.value = data.sessionId
+								if (data.sessionId) {
+									currentSessionId.value = data.sessionId
+									localStorage.setItem(`${SESSION_KEY}_${projectId}`, data.sessionId)
+								}
 								break
 							case 'error':
 								assistantMsg.content += `\n\n> ⚠️ ${event.message}`
@@ -121,6 +125,7 @@ export function useChat(projectId: string) {
 
 	async function loadSession(sessionId: string) {
 		currentSessionId.value = sessionId
+		localStorage.setItem(`${SESSION_KEY}_${projectId}`, sessionId)
 		// 从后端加载历史消息
 		const result = await fetchChatMessages(sessionId)
 		messages.value = result.messages.reverse().map((m: any) => ({
@@ -134,7 +139,30 @@ export function useChat(projectId: string) {
 	function reset() {
 		messages.value = []
 		currentSessionId.value = null
+		localStorage.removeItem(`${SESSION_KEY}_${projectId}`)
 	}
 
-	return { messages, isStreaming, currentSessionId, send, loadSession, reset }
+	async function restoreSession() {
+		// 尝试恢复上次会话
+		const persistedId = localStorage.getItem(`${SESSION_KEY}_${projectId}`)
+		if (persistedId) {
+			try {
+				await loadSession(persistedId)
+				return
+			} catch {
+				localStorage.removeItem(`${SESSION_KEY}_${projectId}`)
+			}
+		}
+		// 没有持久化的会话 ID，尝试获取最近的会话
+		try {
+			const { sessions } = await fetchChatSessions(projectId)
+			if (sessions.length > 0) {
+				await loadSession(sessions[0].id)
+			}
+		} catch {
+			// 获取会话列表失败，忽略
+		}
+	}
+
+	return { messages, isStreaming, currentSessionId, send, loadSession, reset, restoreSession }
 }
