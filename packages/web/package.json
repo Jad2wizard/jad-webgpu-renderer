@@ -21,6 +21,7 @@
 		"bcryptjs": "^2.4.3",
 		"better-sqlite3": "^11.7.0",
 		"cors": "^2.8.5",
+		"dotenv": "^17.4.2",
 		"drizzle-orm": "^0.40.1",
 		"element-plus": "^2.9.7",
 		"express": "^4.21.2",
