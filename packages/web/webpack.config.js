@@ -59,6 +59,7 @@ module.exports = {
 		static: './dist',
 		hot: true,
 		port: 4080,
+		historyApiFallback: true,
 		proxy: [
 			{
 				context: ['/api'],

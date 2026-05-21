@@ -7,7 +7,10 @@ const api = ofetch.create({
 	onRequest({ options }) {
 		const token = localStorage.getItem('token')
 		if (token) {
-			Object.assign(options.headers || {}, { Authorization: `Bearer ${token}` })
+			options.headers = {
+				...options.headers,
+				Authorization: `Bearer ${token}`,
+			}
 		}
 	},
 })
