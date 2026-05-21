@@ -39,7 +39,14 @@ export function initDb(): ReturnType<typeof drizzle<typeof schema>> {
 
 	_db = drizzle(sqlite, { schema })
 
-	// 开发阶段使用 drizzle-kit push 建表，生产使用 drizzle-kit migrate
+	// 自动建表（开发/生产通用）
+	createTablesIfNotExists(sqlite)
+	// 安全迁移：忽略"列已存在"错误
+	try {
+		sqlite.exec('ALTER TABLE datasets ADD COLUMN property_fields TEXT')
+	} catch (_e) {
+		// 列已存在，跳过
+	}
 
 	return _db
 }

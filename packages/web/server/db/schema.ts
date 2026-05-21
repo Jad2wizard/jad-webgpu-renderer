@@ -89,6 +89,7 @@ export const datasets = sqliteTable(
 		featureCount: integer('feature_count').notNull().default(0),
 		geometryType: text('geometry_type'),
 		extent: text('extent'),
+		propertyFields: text('property_fields'),
 		data: text('data').notNull().default('[]'),
 		createdAt: text('created_at')
 			.notNull()

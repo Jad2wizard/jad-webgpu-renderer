@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef } from 'vue'
 import type { MapConfig, LayerConfig, ViewportConfig } from '@shared/types'
+import { defaultHeatmapStyle, defaultScatterStyle } from '@shared/types'
 
 // GMap 类型从 map 包导出，这里做前向声明以解耦
 type GMapInstance = InstanceType<(typeof import('@webgpu-gmap/map'))['default']> | null
@@ -50,6 +51,71 @@ export const useMapStore = defineStore('map', () => {
 		g?.layerManager.getLayer(layerId)?.updateStyle(style)
 	}
 
+	// ---- gmap 重建（切换图层类型 / 应用映射后调用） ----
+	let _recreateGMapHandler: (() => Promise<void>) | null = null
+
+	function registerRecreateHandler(fn: () => Promise<void>) {
+		_recreateGMapHandler = fn
+	}
+
+	async function recreateGMap() {
+		if (_recreateGMapHandler) {
+			await _recreateGMapHandler()
+		}
+	}
+
+	// ---- 应用映射 → 重建 gmap ----
+	async function rebuildScatterLayerFromMapping(_projectId: string, _layerId: string) {
+		await recreateGMap()
+	}
+
+	// ---- 热力图切换回散点图层 ----
+	async function convertLayerToScatter(_projectId: string, layerId: string) {
+		const idx = layers.value.findIndex((l) => l.id === layerId)
+		if (idx === -1) return
+		const layer = layers.value[idx]
+		if (layer.type !== 'heatmap') return
+
+		// 更新响应式配置：改类型 + 重置样式
+		const updatedLayer: any = {
+			...layer,
+			type: 'scatter',
+			style: { ...defaultScatterStyle, radius: (layer.style as any).radius },
+		}
+		const newLayers = [...layers.value]
+		newLayers[idx] = updatedLayer
+		if (config.value) {
+			config.value = { ...config.value, layers: newLayers }
+		}
+
+		await recreateGMap()
+	}
+
+	// ---- 散点图层切换为热力图 ----
+	async function convertLayerToHeatmap(_projectId: string, layerId: string) {
+		const idx = layers.value.findIndex((l) => l.id === layerId)
+		if (idx === -1) return
+		const layer = layers.value[idx]
+		if (layer.type !== 'scatter') return
+
+		// 更新响应式配置：改类型 + 重置样式
+		const updatedLayer: any = {
+			...layer,
+			type: 'heatmap',
+			style: {
+				...defaultHeatmapStyle,
+				radius: (layer.style as any).radius,
+			},
+		}
+		const newLayers = [...layers.value]
+		newLayers[idx] = updatedLayer
+		if (config.value) {
+			config.value = { ...config.value, layers: newLayers }
+		}
+
+		await recreateGMap()
+	}
+
 	// ---- Agent 修改后全量刷新配置（收到 config_changed 事件时调用） ----
 	function refreshFromConfig(newConfig: MapConfig) {
 		config.value = newConfig
@@ -82,12 +148,17 @@ export const useMapStore = defineStore('map', () => {
 		config,
 		selectedLayerId,
 		isUploading,
-		ttchatPanelOpen,
+		chatPanelOpen,
 		layers,
 		selectedLayer,
 		selectLayer,
 		updateViewport,
 		updateLayerStyle,
 		refreshFromConfig,
+		registerRecreateHandler,
+		recreateGMap,
+		rebuildScatterLayerFromMapping,
+		convertLayerToHeatmap,
+		convertLayerToScatter,
 	}
 })

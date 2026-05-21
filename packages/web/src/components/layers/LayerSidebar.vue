@@ -20,7 +20,6 @@
 					]"
 					@click="mapStore.selectLayer(layer.id)"
 				>
-					<span class="text-xs">{{ typeIcon(layer.type) }}</span>
 					<el-switch
 						:model-value="layer.visible"
 						size="small"
@@ -28,6 +27,24 @@
 						@click.stop
 					/>
 					<span class="flex-1 truncate">{{ layer.name }}</span>
+					<el-button
+						v-if="layer.type === 'scatter'"
+						text
+						size="small"
+						title="切换为热力图"
+						@click.stop="handleConvertToHeatmap(layer.id)"
+					>
+						◉
+					</el-button>
+					<el-button
+						v-if="layer.type === 'heatmap'"
+						text
+						size="small"
+						title="切换为散点图"
+						@click.stop="handleConvertToScatter(layer.id)"
+					>
+						●
+					</el-button>
 					<el-popconfirm
 						title="确认删除？"
 						@confirm="handleDeleteLayer(layer.id)"
@@ -63,13 +80,18 @@
 			<span class="text-sm font-semibold text-gray-600 block mb-2">
 				样式编辑 — {{ mapStore.selectedLayer.name }}
 			</span>
-			<StyleEditor :layer="mapStore.selectedLayer" @update="handleStyleUpdate" />
+			<StyleEditor
+				:layer="mapStore.selectedLayer"
+				:property-fields="propertyFields"
+				@update="handleStyleUpdate"
+				@apply-mapping="handleApplyMapping"
+			/>
 		</div>
 	</div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Delete, UploadFilled } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -82,10 +104,25 @@ import type { LayerConfig } from '@shared/types'
 const mapStore = useMapStore()
 const route = useRoute()
 const projectId = computed(() => route.params.id as string)
+const propertyFields = ref<string[] | undefined>(undefined)
 
-function typeIcon(type: string) {
-	return type === 'scatter' ? '●' : type === 'path' ? '〰' : '◉'
-}
+// 当选中散点图层时，获取数据集的属性字段名
+watch(
+	() => mapStore.selectedLayer,
+	async (layer) => {
+		if (layer?.type === 'scatter') {
+			try {
+				const ds = await fetchDatasetData(projectId.value, layer.datasetId)
+				propertyFields.value = ds.propertyFields
+			} catch {
+				propertyFields.value = undefined
+			}
+		} else {
+			propertyFields.value = undefined
+		}
+	},
+	{ immediate: true }
+)
 
 async function toggleLayer(layer: LayerConfig) {
 	await updateLayer(projectId.value, layer.id, {
@@ -144,5 +181,34 @@ async function handleUpload(file: any) {
 function handleStyleUpdate(layerId: string, style: Record<string, unknown>) {
 	mapStore.updateLayerStyle(layerId, style)
 	updateLayer(projectId.value, layerId, { style }).catch(() => {})
+}
+
+async function handleApplyMapping(layerId: string) {
+	try {
+		await mapStore.rebuildScatterLayerFromMapping(projectId.value, layerId)
+		ElMessage.success('映射已应用')
+	} catch (err: any) {
+		ElMessage.error('应用映射失败')
+	}
+}
+
+async function handleConvertToHeatmap(layerId: string) {
+	try {
+		await updateLayer(projectId.value, layerId, { type: 'heatmap' })
+		await mapStore.convertLayerToHeatmap(projectId.value, layerId)
+		ElMessage.success('已转为热力图')
+	} catch (err: any) {
+		ElMessage.error('转换失败')
+	}
+}
+
+async function handleConvertToScatter(layerId: string) {
+	try {
+		await updateLayer(projectId.value, layerId, { type: 'scatter' })
+		await mapStore.convertLayerToScatter(projectId.value, layerId)
+		ElMessage.success('已转为散点图')
+	} catch (err: any) {
+		ElMessage.error('转换失败')
+	}
 }
 </script>

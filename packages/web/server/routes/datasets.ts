@@ -136,6 +136,7 @@ router.post(
 						e: maxLon,
 						n: maxLat,
 					}),
+					propertyFields: JSON.stringify(propertyFields),
 					data: JSON.stringify(data),
 				})
 
@@ -175,6 +176,7 @@ router.get('/projects/:projectId/datasets/:id/data', auth, async (req: Request, 
 		extent: ds.extent ? JSON.parse(ds.extent) : null,
 		featureCount: ds.featureCount,
 		geometryType: ds.geometryType || 'Unknown',
+		propertyFields: ds.propertyFields ? JSON.parse(ds.propertyFields) : undefined,
 	}
 
 	res.json(result)

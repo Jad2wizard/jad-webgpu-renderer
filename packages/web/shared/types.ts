@@ -77,7 +77,6 @@ export interface ScatterFieldsConfig {
 export interface ScatterStyleConfig {
 	color: Color
 	radius: number
-	highlight?: { color: Color; radius: number }
 	blending: Blending
 	colorMapping?: { r: number; g: number; b: number; a: number; range?: [number, number] }
 	radiusMapping?: { field: number; range?: [number, number] }
@@ -97,7 +96,6 @@ export interface ScatterLayerConfig {
 export const defaultScatterStyle: ScatterStyleConfig = {
 	color: [0.83, 0.18, 0.16, 1],
 	radius: 8,
-	highlight: { color: [1, 0.11, 0.08, 1], radius: 15 },
 	blending: 'normalBlending',
 }
 
@@ -242,6 +240,7 @@ export interface DatasetData {
 	extent: Extent | null
 	featureCount: number
 	geometryType: string
+	propertyFields?: string[]
 }
 
 // ---- API 请求/响应类型 ----

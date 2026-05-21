@@ -229,7 +229,7 @@ export const setBlendingMode = tool(
 // ==================== 样式工具：类型专用 ====================
 
 export const setScatterStyle = tool(
-	async ({ projectId, layerId, color, radius, blending, highlightColor, highlightRadius }) => {
+	async ({ projectId, layerId, color, radius, blending }) => {
 		const layer = await db().select().from(layers).where(eq(layers.id, layerId)).get()
 		if (!layer) return `错误：图层 ${layerId} 不存在`
 		if (layer.type !== 'scatter') return '错误：此工具仅适用于 scatter 图层'
@@ -240,12 +240,6 @@ export const setScatterStyle = tool(
 		if (radius !== undefined && radius !== null)
 			config.style.radius = Math.max(1, Math.min(255, radius))
 		if (blending) config.style.blending = blending
-		if (highlightColor || (highlightRadius !== undefined && highlightRadius !== null)) {
-			config.style.highlight ??= {}
-			if (highlightColor) config.style.highlight.color = highlightColor
-			if (highlightRadius !== undefined && highlightRadius !== null)
-				config.style.highlight.radius = highlightRadius
-		}
 
 		await db()
 			.update(layers)
@@ -265,8 +259,6 @@ export const setScatterStyle = tool(
 			blending: z
 				.enum(['normalBlending', 'additiveBlending', 'subtractiveBlending'])
 				.optional(),
-			highlightColor: z.array(z.number().min(0).max(1)).length(4).optional(),
-			highlightRadius: z.number().min(1).max(255).optional(),
 		}),
 	}
 )

@@ -6,6 +6,7 @@ import type {
 	HeatmapLayerConfig,
 	Color,
 } from '@shared/types'
+import { defaultHeatmapStyle, defaultScatterStyle } from '@shared/types'
 
 type GMap = any
 
@@ -44,7 +45,37 @@ export async function createLayersFromConfig(
 	}
 }
 
-function addScatterLayer(gmap: GMap, config: ScatterLayerConfig, data: (number | string)[][]) {
+/**
+ * 重建散点图层（用于更新 colorMapping / radiusMapping 后重新生成 per-point 数据）
+ *
+ * 先删除旧图层并等待 GPU 帧完成释放资源，再创建新图层，避免 WebGPU 资源冲突。
+ */
+export async function rebuildScatterLayer(
+	gmap: GMap,
+	config: ScatterLayerConfig,
+	data: (number | string)[][]
+) {
+	// 1. 从 Scene 中移除旧图层并释放 WebGPU 资源
+	gmap.removeLayer(config.id)
+
+	// 2. 等待帧完成，确保 GPU 释放旧管线资源
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+
+	// 3. 重新创建图层
+	const layer = addScatterLayer(gmap, config, data)
+	await layer.updateData(data)
+	if (layer.buildIndexTree) {
+		layer.buildIndexTree()
+	}
+	return layer
+}
+
+export function addScatterLayer(
+	gmap: GMap,
+	config: ScatterLayerConfig,
+	data: (number | string)[][]
+) {
 	const { fields, style } = config
 
 	return gmap.addLayer(config.id, 'scatter', {
@@ -57,7 +88,6 @@ function addScatterLayer(gmap: GMap, config: ScatterLayerConfig, data: (number |
 		style: {
 			color: style.color,
 			radius: style.radius,
-			highlighting: style.highlight,
 			blending: style.blending,
 		},
 		getColor: buildColorCallback(style),
@@ -89,6 +119,91 @@ function addPathLayer(gmap: GMap, config: PathLayerConfig, data: (number | strin
 			blending: style.blending,
 		},
 	})
+}
+
+/**
+ * 将散点图层转换为热力图图层（复用同一份数据）
+ */
+export async function convertScatterToHeatmap(
+	gmap: GMap,
+	scatterConfig: ScatterLayerConfig,
+	data: (number | string)[][]
+) {
+	gmap.removeLayer(scatterConfig.id)
+
+	// 等待 GPU 帧完成释放资源（热力图有 3-pass 管线，多等一帧）
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+
+	const heatmapConfig: HeatmapLayerConfig = {
+		id: scatterConfig.id,
+		name: scatterConfig.name,
+		type: 'heatmap',
+		visible: scatterConfig.visible,
+		level: scatterConfig.level,
+		datasetId: scatterConfig.datasetId,
+		fields: {
+			lonField: scatterConfig.fields.lonField,
+			latField: scatterConfig.fields.latField,
+			timeField: scatterConfig.fields.timeField,
+		},
+		style: {
+			colorList: defaultHeatmapStyle.colorList,
+			colorOffsets: defaultHeatmapStyle.colorOffsets,
+			blur: defaultHeatmapStyle.blur,
+			radius: scatterConfig.style.radius,
+			blending: scatterConfig.style.blending,
+		},
+	}
+
+	const layer = addHeatmapLayer(gmap, heatmapConfig, data)
+	await layer.updateData(data)
+	return { layer, config: heatmapConfig }
+}
+
+/**
+ * 将热力图图层转换为散点图层（复用同一份数据）
+ */
+export async function convertHeatmapToScatter(
+	gmap: GMap,
+	heatmapConfig: HeatmapLayerConfig,
+	data: (number | string)[][]
+) {
+	gmap.removeLayer(heatmapConfig.id)
+
+	// 等待 GPU 帧完成释放资源（热力图有 3-pass 管线，多等一帧）
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+	await new Promise((resolve) => requestAnimationFrame(resolve))
+
+	const scatterConfig: ScatterLayerConfig = {
+		id: heatmapConfig.id,
+		name: heatmapConfig.name,
+		type: 'scatter',
+		visible: heatmapConfig.visible,
+		level: heatmapConfig.level,
+		datasetId: heatmapConfig.datasetId,
+		fields: {
+			lonField: heatmapConfig.fields.lonField,
+			latField: heatmapConfig.fields.latField,
+			timeField: heatmapConfig.fields.timeField,
+		},
+		style: {
+			color: defaultScatterStyle.color,
+			radius: heatmapConfig.style.radius,
+			blending: heatmapConfig.style.blending,
+		},
+	}
+
+	const layer = addScatterLayer(gmap, scatterConfig, data)
+	await layer.updateData(data)
+	if (layer.buildIndexTree) {
+		layer.buildIndexTree()
+	}
+	return { layer, config: scatterConfig }
 }
 
 function addHeatmapLayer(gmap: GMap, config: HeatmapLayerConfig, data: (number | string)[][]) {

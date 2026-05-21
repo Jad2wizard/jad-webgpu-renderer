@@ -114,6 +114,27 @@ router.put('/projects/:id/layers/:layerId', auth, async (req: Request, res: Resp
 	const currentConfig = JSON.parse(layer.config)
 	const updates: Record<string, unknown> = {}
 
+	// 类型变更：切换图层类型时重置样式
+	if (req.body.type !== undefined && req.body.type !== currentConfig.type) {
+		if (!['scatter', 'path', 'heatmap'].includes(req.body.type)) {
+			return res.status(400).json({ error: `不支持的图层类型: ${req.body.type}` })
+		}
+		currentConfig.type = req.body.type
+		updates.type = req.body.type
+		// 重置为新类型的默认样式
+		switch (req.body.type) {
+			case 'scatter':
+				currentConfig.style = { ...defaultScatterStyle }
+				break
+			case 'path':
+				currentConfig.style = { ...defaultPathStyle }
+				break
+			case 'heatmap':
+				currentConfig.style = { ...defaultHeatmapStyle }
+				break
+		}
+	}
+
 	// 合并样式更新
 	if (req.body.style) {
 		currentConfig.style = { ...currentConfig.style, ...req.body.style }
