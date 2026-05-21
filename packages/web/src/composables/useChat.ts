@@ -1,7 +1,14 @@
 import { ref } from 'vue'
 import { ofetch } from 'ofetch'
 import { useMapStore } from '@/stores/map'
-import { fetchProject } from '@/utils/api'
+import { fetchProject, fetchChatMessages } from '@/utils/api'
+
+const apiBase = '/api'
+
+function authHeaders(): Record<string, string> {
+	const token = localStorage.getItem('token')
+	return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 export interface ChatMessage {
 	id: string
@@ -34,8 +41,12 @@ export function useChat(projectId: string) {
 		messages.value.push(assistantMsg)
 
 		try {
-			const response = await ofetch('/api/chat', {
+			const response = await ofetch(`${apiBase}/chat`, {
 				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					...authHeaders(),
+				},
 				body: {
 					projectId,
 					sessionId: currentSessionId.value,
@@ -111,7 +122,7 @@ export function useChat(projectId: string) {
 	async function loadSession(sessionId: string) {
 		currentSessionId.value = sessionId
 		// 从后端加载历史消息
-		const result = await ofetch<any>(`/api/chat/sessions/${sessionId}`)
+		const result = await fetchChatMessages(sessionId)
 		messages.value = result.messages.reverse().map((m: any) => ({
 			id: m.id,
 			role: m.role,
