@@ -77,12 +77,7 @@ import { useMapStore } from '@/stores/map'
 import { uploadDataset, createLayer, deleteLayer, updateLayer, fetchDatasetData } from '@/utils/api'
 import { createLayersFromConfig } from '@/utils/applyConfig'
 import StyleEditor from './StyleEditor.vue'
-import type {
-	LayerConfig,
-	ScatterLayerConfig,
-	PathLayerConfig,
-	HeatmapLayerConfig,
-} from '@shared/types'
+import type { LayerConfig } from '@shared/types'
 
 const mapStore = useMapStore()
 const route = useRoute()
@@ -93,7 +88,7 @@ function typeIcon(type: string) {
 }
 
 async function toggleLayer(layer: LayerConfig) {
-	await updateLayer(mapStore.config!.layers.find((l) => l.id === layer.id) ? '' : '', layer.id, {
+	await updateLayer(projectId.value, layer.id, {
 		visible: !layer.visible,
 	})
 	layer.visible = !layer.visible
@@ -101,46 +96,42 @@ async function toggleLayer(layer: LayerConfig) {
 }
 
 async function handleDeleteLayer(layerId: string) {
-	// 从 store 找到 projectId
-	const projectId = new URLSearchParams(window.location.pathname).get('')
-	// 使用当前 URL 推导
-	const pathParts = window.location.pathname.split('/')
-	const pid = pathParts[pathParts.length - 1]
-
-	await deleteLayer(pid, layerId)
+	await deleteLayer(projectId.value, layerId)
 	mapStore.config!.layers = mapStore.config!.layers.filter((l) => l.id !== layerId)
 	if (mapStore.selectedLayerId === layerId) mapStore.selectLayer(null)
 	ElMessage.success('图层已删除')
 }
 
 async function handleUpload(file: any) {
-	const pathParts = window.location.pathname.split('/')
-	const pid = pathParts[pathParts.length - 1]
-
 	mapStore.isUploading = true
 	try {
-		const result = await uploadDataset(pid, file.raw, file.name)
+		const result = await uploadDataset(projectId.value, file.raw, file.name)
 
-		// 自动推断图层类型
 		let layerType: 'scatter' | 'path' | 'heatmap' = 'scatter'
 		if (result.dataset.geometryType?.includes('LineString')) {
 			layerType = 'path'
 		}
 
-		// 自动创建图层
-		const layerData = await createLayer(pid, {
+		const layerData = await createLayer(projectId.value, {
 			name: result.dataset.name,
 			type: layerType,
 			datasetId: result.dataset.id,
 			fields: {
 				lonField: 0,
 				latField: 1,
-				...(layerType === 'path' ? {} : {}),
 			},
 		})
 
-		// 添加到 store
 		mapStore.config?.layers.push(layerData.layer as any)
+
+		if (mapStore.gmapInstance) {
+			const dataset = await fetchDatasetData(projectId.value, result.dataset.id)
+			const config = mapStore.config!
+			await createLayersFromConfig(mapStore.gmapInstance, config, async (dsId) => {
+				if (dsId === result.dataset.id) return dataset.data
+				return (await fetchDatasetData(projectId.value, dsId)).data
+			})
+		}
 
 		ElMessage.success(`上传成功：${result.dataset.featureCount} 条数据`)
 	} catch (err: any) {
@@ -152,8 +143,6 @@ async function handleUpload(file: any) {
 
 function handleStyleUpdate(layerId: string, style: Record<string, unknown>) {
 	mapStore.updateLayerStyle(layerId, style)
-	const pathParts = window.location.pathname.split('/')
-	const pid = pathParts[pathParts.length - 1]
-	updateLayer(pid, layerId, { style }).catch(() => {})
+	updateLayer(projectId.value, layerId, { style }).catch(() => {})
 }
 </script>
