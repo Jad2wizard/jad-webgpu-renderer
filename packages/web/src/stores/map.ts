@@ -116,8 +116,17 @@ export const useMapStore = defineStore('map', () => {
 		await recreateGMap()
 	}
 
+	// ---- 检测散点图层是否有数据映射 ----
+	function _hasDataMapping(layers: MapConfig['layers']) {
+		return layers.some((lc) => {
+			if (lc.type !== 'scatter') return false
+			const style = lc.style as any
+			return !!(style.colorMapping || style.radiusMapping)
+		})
+	}
+
 	// ---- Agent 修改后全量刷新配置（收到 config_changed 事件时调用） ----
-	function refreshFromConfig(newConfig: MapConfig) {
+	async function refreshFromConfig(newConfig: MapConfig) {
 		const prevConfig = config.value
 		config.value = newConfig
 		const g = gmapInstance.value as any
@@ -137,7 +146,18 @@ export const useMapStore = defineStore('map', () => {
 			g.view.setZoom(newVp.zoom)
 		}
 
-		// 图层变更
+		// 数据映射 / 图层类型变更 → 全量重建 GMap
+		const hasMapping = _hasDataMapping(newConfig.layers)
+		const hadMapping = _hasDataMapping(prevConfig?.layers ?? [])
+		const typeChanged = (prevConfig?.layers ?? []).some((old) => {
+			const next = newConfig.layers.find((l) => l.id === old.id)
+			return next && next.type !== old.type
+		})
+		if (hasMapping || hadMapping || typeChanged) {
+			await recreateGMap()
+			return
+		}
+
 		const newIds = new Set(newConfig.layers.map((l) => l.id))
 		for (const oldLayer of prevConfig?.layers ?? []) {
 			if (!newIds.has(oldLayer.id)) g.removeLayer(oldLayer.id)

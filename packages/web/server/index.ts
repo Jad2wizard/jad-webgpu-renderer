@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import { initDb } from './db'
 import { config } from './config'
+import { trace } from './middleware/trace'
 import authRoutes from './routes/auth'
 import projectRoutes from './routes/projects'
 import layerRoutes from './routes/layers'
@@ -23,9 +24,10 @@ export async function createServer() {
 	const app = express()
 
 	// ---- 全局中间件 ----
+	app.use(trace)
 	app.use(
 		cors({
-			origin: config.isProduction ? false : 'http://localhost:5173',
+			origin: config.isProduction ? false : 'http://localhost:4080',
 			credentials: true,
 		})
 	)

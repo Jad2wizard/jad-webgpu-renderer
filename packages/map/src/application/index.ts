@@ -216,6 +216,7 @@ class GMap extends EventEmitter {
 	}
 
 	dispose() {
+		this.active = false
 		this._performanceWidget.dispose()
 		this._interacts.dispose()
 		this._layerManager.dispose()

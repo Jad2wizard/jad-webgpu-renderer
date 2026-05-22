@@ -1,7 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { AgentExecutor, createToolCallingAgent } from 'langchain/agents'
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages'
+import { AIMessage, BaseMessage, HumanMessage, ToolMessage } from '@langchain/core/messages'
 import { eq, asc } from 'drizzle-orm'
 import { db } from '../db'
 import { projects, layers, chatMessages as chatMessagesTable, chatSessions } from '../db/schema'
@@ -9,88 +9,23 @@ import { ALL_TOOLS } from './tools'
 import { config } from '../config'
 
 // ---- 模型 ----
+// 通过 thinking: { type: "disabled" } 关闭 DeepSeek 思考模式，
+// 模型不再生成 reasoning_content，避免历史会话 400 错误。
 
-// 自定义 fetch：注入 reasoning_content 到 assistant 消息中（DeepSeek thinking mode 要求）
-const _origFetch = globalThis.fetch
-const customFetch: typeof fetch = async (url, init) => {
-	if (init?.body && typeof init.body === 'string') {
-		try {
-			const body = JSON.parse(init.body)
-			if (body.messages) {
-				// 尝试索引匹配注入 reasoning_content
-				const reasoningArr = (model as any)._reasoningArr as (string | null)[]
-				if (reasoningArr?.length) {
-					let arrIdx = 0
-					for (let i = 0; i < body.messages.length; i++) {
-						const msg = body.messages[i]
-						// 跳过 system 消息，它们不计入 reasoning 索引
-						while (arrIdx < reasoningArr.length && reasoningArr[arrIdx] === undefined) {
-							arrIdx++
-						}
-						if (msg.role === 'assistant' && arrIdx < reasoningArr.length) {
-							const rc = reasoningArr[arrIdx]
-							if (rc) {
-								msg.reasoning_content = rc
-							}
-							arrIdx++
-						}
-					}
-				}
-				init = { ...init, body: JSON.stringify(body) }
-			}
-		} catch { /* JSON 解析失败则保持原样 */ }
-	}
-	return _origFetch(url, init)
-}
-
+console.log(`\n======================\n${config.openaiModel}\n${config.openaiBaseUrl}`)
 const model = new ChatOpenAI({
 	model: config.openaiModel,
 	apiKey: config.openaiApiKey,
 	configuration: {
 		baseURL: config.openaiBaseUrl,
-		fetch: customFetch,
+	},
+	modelKwargs: {
+		thinking: { type: 'disabled' },
 	},
 	temperature: 0.3,
 	maxTokens: 4096,
+	timeout: 60000,
 })
-
-// ---- 兼容 DeepSeek thinking mode：捕获并回传 reasoning_content ----
-
-// 1. 从 API 响应 delta 中捕获 reasoning_content
-const _origConvertDelta = (model as any)._convertOpenAIDeltaToBaseMessageChunk?.bind(model)
-if (_origConvertDelta) {
-	;(model as any)._convertOpenAIDeltaToBaseMessageChunk = function (
-		delta: Record<string, any>,
-		rawResponse: any,
-		defaultRole?: any
-	) {
-		const chunk = _origConvertDelta(delta, rawResponse, defaultRole)
-		if (delta.reasoning_content) {
-			chunk.additional_kwargs ??= {}
-			chunk.additional_kwargs.reasoning_content =
-				(chunk.additional_kwargs.reasoning_content || '') + delta.reasoning_content
-		}
-		return chunk
-	}
-}
-
-// 2. 拦截 _streamResponseChunks + 自定义 fetch 注入 reasoning_content
-const _origStream = (model as any)._streamResponseChunks?.bind(model)
-if (_origStream) {
-	;(model as any)._streamResponseChunks = async function* (
-		messages: BaseMessage[],
-		options: any,
-		runManager: any
-	) {
-		// 按索引记录 reasoning_content（比 content 匹配更可靠）
-		const reasoningArr: (string | null)[] = messages.map((msg) => {
-			const rc = (msg as any).additional_kwargs?.reasoning_content
-			return rc || null
-		})
-		;(model as any)._reasoningArr = reasoningArr
-		yield* _origStream(messages, options, runManager)
-	}
-}
 
 // ---- System Prompt ----
 
@@ -100,6 +35,16 @@ const SYSTEM_PROMPT = `你是一个专业的地图可视化助手。你可以帮
 - 修改地图视口（中心点、缩放级别）
 - 修改散点图、轨迹图、热力图的样式（颜色、大小、线宽、透明度等）
 - 管理图层（显隐、排序、删除）
+- **图层类型转换**：在散点图和热力图之间切换，复用同一份数据
+- **散点图层数据映射**：将数据列映射到颜色通道（RGBA）或半径，实现数据驱动的可视化
+
+## 散点图层数据映射
+数据映射允许你用数据文件中的列值来控制每个散点的颜色和大小，而不是使用统一的默认值。
+- 使用 get_current_config 查看图层时，fields 对象中的字段名对应数据列的索引号
+- **colorMapping**：将 4 个数据列分别映射到 RGBA 四个颜色通道。r/g/b/a 均为数据列的索引（从 0 开始）。可选 range [min, max] 用于将数据值归一化到 0-1
+- **radiusMapping**：将 1 个数据列映射为散点半径（像素）。field 为数据列索引。可选 range [min, max] 限制半径范围
+- 设置数据映射后，将覆盖图层默认的颜色和半径设置（数据映射优先级更高）
+- 清除映射后，图层恢复使用默认颜色和半径
 
 ## 颜色约定
 颜色使用 [r, g, b, a] 四元组，每个分量取值范围 0-1。
@@ -113,19 +58,61 @@ const SYSTEM_PROMPT = `你是一个专业的地图可视化助手。你可以帮
 - 透明 = [0, 0, 0, 0]
 
 ## 规则
-1. 在修改配置之前，先用 get_current_config 了解当前状态
-2. 如果用户没有指定图层，先用 list_layers 列出可用图层
-3. 半径的单位是屏幕像素，范围 1-255
-4. 缩放级别范围 1-18
-5. 混合模式：normalBlending(正常)、additiveBlending(叠加增亮)、subtractiveBlending(相减变暗)
-6. 修改完成后用简洁的中文确认改动
-7. 如果用户说的颜色名称不在约定列表中（如"紫色"），使用你最接近的估计值（如紫色 ≈ [0.5, 0, 0.5, 1]）`
+0. **你必须调用提供的工具（Tools）来实际修改地图的配置，绝对不要仅仅在回复中说你修改了！**
+1. 在修改配置之前，先用 get_current_config 了解当前状态（如果尚未提供）。
+2. 如果用户没有指定图层，先用 list_layers 列出可用图层。
+3. 半径的单位是屏幕像素，范围 1-255。
+4. 缩放级别范围 1-18。
+5. 混合模式：normalBlending(正常)、additiveBlending(叠加增亮)、subtractiveBlending(相减变暗)。
+5.5. 散点图和热力图可以互相转换，使用 convert_layer_type 工具。转换后半径和混合模式设置会保留。
+6. 必须调用相应的修改工具后，再用简洁的中文确认改动。
+7. 如果用户说的颜色名称不在约定列表中，使用你最接近的估计值。`
 
 // ---- Prompt 模板 ----
 
 const prompt = ChatPromptTemplate.fromMessages([
 	['system', SYSTEM_PROMPT],
 	new MessagesPlaceholder('chat_history'),
+	new HumanMessage('把散点颜色改成红色'),
+	new AIMessage({
+		content: '',
+		tool_calls: [
+			{
+				name: 'set_scatter_style',
+				args: {
+					projectId: '真实的projectId',
+					layerId: '真实的layerId',
+					color: [1, 0, 0, 1],
+				},
+				id: 'call_example1',
+			},
+		],
+	}),
+	new ToolMessage({
+		content: '已更新散点图层"test"的样式',
+		tool_call_id: 'call_example1',
+	}),
+	new AIMessage('我已经把散点颜色改成红色了✅'),
+	new HumanMessage('用第3、4、5、6列的数据作为散点的RGBA颜色'),
+	new AIMessage({
+		content: '',
+		tool_calls: [
+			{
+				name: 'set_scatter_data_mapping',
+				args: {
+					projectId: '真实的projectId',
+					layerId: '真实的layerId',
+					colorMapping: { r: 3, g: 4, b: 5, a: 6 },
+				},
+				id: 'call_example2',
+			},
+		],
+	}),
+	new ToolMessage({
+		content: '散点图层"test"：已设置颜色映射（R:列3, G:列4, B:列5, A:列6）',
+		tool_call_id: 'call_example2',
+	}),
+	new AIMessage('已设置数据颜色映射✅，现在散点的颜色由第3-6列数据驱动'),
 	['human', '{input}'],
 	new MessagesPlaceholder('agent_scratchpad'),
 ])
@@ -154,12 +141,7 @@ async function loadChatHistory(sessionId: string): Promise<BaseMessage[]> {
 	return messages.map((m: any) => {
 		if (m.role === 'user') return new HumanMessage(m.content)
 		if (m.role === 'assistant') {
-			return new AIMessage({
-				content: m.content,
-				additional_kwargs: m.reasoningContent
-					? { reasoning_content: m.reasoningContent }
-					: {},
-			})
+			return new AIMessage(m.content)
 		}
 		return new HumanMessage(m.content)
 	})
@@ -203,12 +185,13 @@ export async function* runAgent(
 		})),
 	}
 
-	const input = `当前项目的地图配置：\n${JSON.stringify(currentConfig, null, 2)}\n\n用户请求：${userMessage}`
+	const input = `当前项目的 Project ID: ${projectId}\n当前项目的地图配置：\n${JSON.stringify(currentConfig, null, 2)}\n\n用户请求：${userMessage}`
 
 	// 3. 流式执行
 	let fullContent = ''
-	let reasoningContent = ''
 	const toolCalls: Array<{ name: string; args: Record<string, unknown>; result?: string }> = []
+	// 在 agent 开始执行前记录用户消息时间戳，避免与 assistant 消息时间相同
+	const userCreatedAt = new Date().toISOString()
 
 	try {
 		const stream = await executor.streamEvents(
@@ -217,13 +200,14 @@ export async function* runAgent(
 		)
 
 		for await (const event of stream) {
+			// 诊断日志
+			if (event.event !== 'on_chain_start' && event.event !== 'on_chain_end') {
+				console.log('[agent] event=%s name=%s', event.event, event.name || '-')
+			}
 			switch (event.event) {
 				case 'on_chat_model_stream': {
 					const chunk = event.data.chunk
-					// 捕获 DeepSeek thinking mode 的 reasoning_content
-					if ((chunk as any).additional_kwargs?.reasoning_content) {
-						reasoningContent += (chunk as any).additional_kwargs.reasoning_content
-					}
+					console.log(chunk)
 					if (chunk.content) {
 						const text = typeof chunk.content === 'string' ? chunk.content : ''
 						fullContent += text
@@ -275,15 +259,15 @@ export async function* runAgent(
 		}
 
 		// 4. 保存消息到数据库
-		const now = new Date().toISOString()
 		await db().insert(chatMessagesTable).values({
 			id: crypto.randomUUID(),
 			sessionId,
 			role: 'user',
 			content: userMessage,
-			createdAt: now,
+			createdAt: userCreatedAt,
 		})
 
+		const assistantCreatedAt = new Date().toISOString()
 		await db()
 			.insert(chatMessagesTable)
 			.values({
@@ -291,15 +275,14 @@ export async function* runAgent(
 				sessionId,
 				role: 'assistant',
 				content: fullContent,
-				reasoningContent: reasoningContent || null,
 				toolCalls: JSON.stringify(toolCalls),
-				createdAt: new Date().toISOString(),
+				createdAt: assistantCreatedAt,
 			})
 
 		// 更新 session 的 updatedAt
 		await db()
 			.update(chatSessions)
-			.set({ updatedAt: now })
+			.set({ updatedAt: assistantCreatedAt })
 			.where(eq(chatSessions.id, sessionId))
 
 		yield { type: 'done', content: fullContent, toolCalls, sessionId }

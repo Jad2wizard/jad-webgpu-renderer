@@ -91,7 +91,9 @@ class LayerManager {
 	}
 
 	updateCurrentTime() {
-		const time = this.gmap.currentTime
+		// 避免在地图销毁后（_gmap 为 undefined）仍触发动画循环更新导致报错
+		if (!this._gmap) return
+		const time = this._gmap.currentTime
 		for (let layerId in this._layers) {
 			const layer = this._layers[layerId]
 			layer.onTimeUpdate(time)

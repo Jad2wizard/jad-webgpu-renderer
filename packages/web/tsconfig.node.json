@@ -1,15 +1,17 @@
 {
 	"compilerOptions": {
-		"target": "ES2020",
+		"target": "ES2022",
 		"module": "ESNext",
 		"moduleResolution": "bundler",
 		"strict": true,
 		"noImplicitAny": true,
 		"strictNullChecks": true,
 		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
 		"skipLibCheck": true,
 		"sourceMap": true,
 		"declaration": false,
+		"types": ["node"],
 		"paths": {
 			"@shared/*": ["./shared/*"]
 		},

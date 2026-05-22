@@ -40,6 +40,7 @@
 		"webpack-dev-server": "^5.0.4"
 	},
 	"dependencies": {
+		"@fortaine/fetch-event-source": "^3.0.6",
 		"@modelcontextprotocol/sdk": "^1.20.0",
 		"@types/lodash": "^4.17.4",
 		"@types/three": "^0.162.0",

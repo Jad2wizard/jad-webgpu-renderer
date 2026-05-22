@@ -13,10 +13,16 @@ const router = Router()
  * 发送对话消息（SSE 流式响应）
  */
 router.post('/chat', auth, async (req: Request, res: Response) => {
+	const log = req.log
 	const { projectId, sessionId: existingSessionId, message } = req.body
 	const userId = req.userId!
 
+	log.info(
+		`[chat] request projectId=${projectId} sessionId=${existingSessionId || '(new)'} msg="${message.slice(0, 80)}"`
+	)
+
 	if (!projectId || !message) {
+		log.warn('[chat] missing projectId or message')
 		return res.status(400).json({ error: 'projectId 和 message 为必填项' })
 	}
 
@@ -28,6 +34,7 @@ router.post('/chat', auth, async (req: Request, res: Response) => {
 		.get()
 
 	if (!proj) {
+		log.warn(`[chat] project not found: ${projectId}`)
 		return res.status(404).json({ error: '项目不存在' })
 	}
 
@@ -36,6 +43,7 @@ router.post('/chat', auth, async (req: Request, res: Response) => {
 
 	if (!sessionId) {
 		sessionId = crypto.randomUUID()
+		log.info(`[chat] creating new session: ${sessionId}`)
 		try {
 			await db()
 				.insert(chatSessions)
@@ -45,11 +53,10 @@ router.post('/chat', auth, async (req: Request, res: Response) => {
 					userId,
 					title: message.slice(0, 50),
 				})
-		} catch {
-			// 如果 session 创建失败，仍然尝试继续（非关键）
+		} catch (err: any) {
+			log.warn(`[chat] session creation failed: ${err.message}`)
 		}
 	} else {
-		// 验证 session 属于当前用户
 		const sess = await db()
 			.select({ id: chatSessions.id })
 			.from(chatSessions)
@@ -57,31 +64,78 @@ router.post('/chat', auth, async (req: Request, res: Response) => {
 			.get()
 
 		if (!sess) {
+			log.warn(`[chat] session not found: ${sessionId}`)
 			return res.status(404).json({ error: '对话不存在' })
 		}
 	}
 
-	// 设置 SSE 响应头
+	// SSE 流式响应
 	res.writeHead(200, {
 		'Content-Type': 'text/event-stream',
 		'Cache-Control': 'no-cache',
 		Connection: 'keep-alive',
 		'X-Accel-Buffering': 'no',
+		'Content-Encoding': 'none', // 禁用压缩，防止中间件缓冲
 	})
+	res.flushHeaders()
+
+	if (res.socket) {
+		res.socket.setNoDelay(true)
+		res.socket.setTimeout(0)
+	}
 
 	const emit = (event: string, data: unknown) => {
 		res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+		// 强制将底层的 response buffer 冲刷出去
+		if (typeof (res as any).flush === 'function') {
+			;(res as any).flush()
+		}
 	}
 
+	let eventCount = 0
+	let textChars = 0
+	let toolCallCount = 0
+	const t0 = Date.now()
+
 	try {
+		log.info(`[chat] starting agent stream sessionId=${sessionId}`)
+
 		for await (const event of runAgent(projectId, sessionId!, message)) {
+			eventCount++
 			emit(event.type, event)
+
+			switch (event.type) {
+				case 'text':
+					textChars += (event.content || '').length
+					break
+				case 'tool_call':
+					toolCallCount++
+					log.info(`[chat] tool_call: ${event.tool}`, event.args)
+					break
+				case 'tool_result':
+					log.info(`[chat] tool_result: ${event.tool}`, {
+						result: (event.result || '').slice(0, 120),
+					})
+					break
+				case 'config_changed':
+					log.info('[chat] config_changed')
+					break
+				case 'done':
+					log.info(
+						`[chat] done events=${eventCount} textChars=${textChars} tools=${toolCallCount} duration=${Date.now() - t0}ms sessionId=${sessionId}`
+					)
+					break
+				case 'error':
+					log.error(`[chat] agent error: ${event.message}`)
+					break
+			}
 		}
 	} catch (err) {
-		console.error('Chat error:', err)
+		log.error(`[chat] stream exception: ${err instanceof Error ? err.message : String(err)}`)
 		emit('error', { message: err instanceof Error ? err.message : '对话失败' })
 	} finally {
 		res.end()
+		log.info(`[chat] stream ended totalEvents=${eventCount} duration=${Date.now() - t0}ms`)
 	}
 })
 

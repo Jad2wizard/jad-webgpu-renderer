@@ -1,10 +1,11 @@
 import { ref } from 'vue'
-import { ofetch } from 'ofetch'
 import { useMapStore } from '@/stores/map'
 import { fetchProject, fetchChatMessages, fetchChatSessions } from '@/utils/api'
 
 const apiBase = '/api'
 const SESSION_KEY = 'chat_current_session'
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function authHeaders(): Record<string, string> {
 	const token = localStorage.getItem('token')
@@ -33,100 +34,148 @@ export function useChat(projectId: string) {
 
 		isStreaming.value = true
 
-		const assistantMsg: ChatMessage = {
+		const rawAssistantMsg: ChatMessage = {
 			id: crypto.randomUUID(),
 			role: 'assistant',
 			content: '',
 			toolCalls: [],
 		}
-		messages.value.push(assistantMsg)
+		messages.value.push(rawAssistantMsg)
+		// 获取被 Vue 代理后的响应式对象
+		const assistantMsg = messages.value[messages.value.length - 1]
+
+		let finished = false
+		let errorMsg: string | null = null
 
 		try {
-			const response = await ofetch(`${apiBase}/chat`, {
+			const response = await fetch(`${apiBase}/chat`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 					...authHeaders(),
 				},
-				body: {
+				body: JSON.stringify({
 					projectId,
 					sessionId: currentSessionId.value,
 					message,
-				},
-				responseType: 'stream',
+				}),
 			})
 
-			const reader = (response as any).getReader()
-			const decoder = new TextDecoder()
+			if (!response.ok) {
+				const text = await response.text()
+				try {
+					const err = JSON.parse(text)
+					if (err.error) errorMsg = err.error
+				} catch (e) {
+					errorMsg = `HTTP ${response.status}`
+				}
+				throw new Error(errorMsg || '请求失败')
+			}
+
+			if (!response.body) {
+				throw new Error('ReadableStream not supported')
+			}
+
+			const reader = response.body.getReader()
+			const decoder = new TextDecoder('utf-8')
 			let buffer = ''
 
-			while (true) {
+			let doneReading = false
+			while (!doneReading) {
 				const { done, value } = await reader.read()
-				if (done) break
+				if (done) {
+					doneReading = true
+					break
+				}
+
+				await delay(100)
 
 				buffer += decoder.decode(value, { stream: true })
+
+				// 解析 SSE 格式
 				const lines = buffer.split('\n')
+				// 保留最后一行未完整的部分
 				buffer = lines.pop() || ''
 
+				let currentEvent = 'message'
+
 				for (const line of lines) {
-					if (!line.startsWith('data: ')) continue
+					if (line.trim() === '') continue
 
-					try {
-						const data = JSON.parse(line.slice(6))
-						const event = data
+					if (line.startsWith('event:')) {
+						currentEvent = line.slice(6).trim()
+					} else if (line.startsWith('data:')) {
+						const dataStr = line.slice(5).trim()
+						if (!dataStr) continue
 
-						switch (event.type) {
-							case 'text':
-								assistantMsg.content += event.content || ''
-								break
-							case 'tool_call':
-								assistantMsg.toolCalls!.push({
-									name: event.tool,
-									args: event.args || {},
-								})
-								break
-							case 'tool_result':
-								const last = assistantMsg.toolCalls!.at(-1)
-								if (last) last.result = event.result
-								break
-							case 'config_changed': {
-								const fresh = await fetchProject(projectId)
-								const p = fresh.project
-								mapStore.refreshFromConfig({
-									version: 1,
-									viewport: p.viewport,
-									tile: p.tileConfig,
-									layers: p.layers,
-									interaction: { boxSelect: { enabled: true, key: 'ctrl' } },
-								})
-								break
-							}
-							case 'done':
-								if (data.sessionId) {
-									currentSessionId.value = data.sessionId
-									localStorage.setItem(`${SESSION_KEY}_${projectId}`, data.sessionId)
+						try {
+							const event = JSON.parse(dataStr)
+							switch (currentEvent) {
+								case 'text':
+									assistantMsg.content += event.content || ''
+									break
+								case 'tool_call':
+									assistantMsg.toolCalls!.push({
+										name: event.tool,
+										args: event.args || {},
+									})
+									break
+								case 'tool_result': {
+									const last = assistantMsg.toolCalls!.at(-1)
+									if (last) last.result = event.result
+									break
 								}
-								break
-							case 'error':
-								assistantMsg.content += `\n\n> ⚠️ ${event.message}`
-								break
+								case 'config_changed': {
+									fetchProject(projectId)
+										.then(async (fresh) => {
+											const p = fresh.project
+											await mapStore.refreshFromConfig({
+												version: 1,
+												viewport: p.viewport,
+												tile: p.tileConfig,
+												layers: p.layers,
+												interaction: {
+													boxSelect: { enabled: true, key: 'ctrl' },
+												},
+											})
+										})
+										.catch(() => {})
+									break
+								}
+								case 'done':
+									finished = true
+									if (event.sessionId) {
+										currentSessionId.value = event.sessionId
+										localStorage.setItem(
+											`${SESSION_KEY}_${projectId}`,
+											event.sessionId
+										)
+									}
+									break
+								case 'error':
+									assistantMsg.content += `\n\n> ⚠️ ${event.message}`
+									break
+							}
+						} catch {
+							// 解析 JSON 失败
 						}
-					} catch {
-						// 跳过无法解析的事件
 					}
 				}
 			}
+			finished = true
 		} catch (err: any) {
-			assistantMsg.content += `\n\n> ❌ 请求失败：${err.message || err}`
+			errorMsg = errorMsg || err.message || String(err)
 		} finally {
 			isStreaming.value = false
+			if (!finished && errorMsg) {
+				assistantMsg.content += `\n\n> ❌ 请求失败：${errorMsg}`
+			}
 		}
 	}
 
 	async function loadSession(sessionId: string) {
 		currentSessionId.value = sessionId
 		localStorage.setItem(`${SESSION_KEY}_${projectId}`, sessionId)
-		// 从后端加载历史消息
 		const result = await fetchChatMessages(sessionId)
 		messages.value = result.messages.reverse().map((m: any) => ({
 			id: m.id,
@@ -143,7 +192,6 @@ export function useChat(projectId: string) {
 	}
 
 	async function restoreSession() {
-		// 尝试恢复上次会话
 		const persistedId = localStorage.getItem(`${SESSION_KEY}_${projectId}`)
 		if (persistedId) {
 			try {
@@ -153,7 +201,6 @@ export function useChat(projectId: string) {
 				localStorage.removeItem(`${SESSION_KEY}_${projectId}`)
 			}
 		}
-		// 没有持久化的会话 ID，尝试获取最近的会话
 		try {
 			const { sessions } = await fetchChatSessions(projectId)
 			if (sessions.length > 0) {

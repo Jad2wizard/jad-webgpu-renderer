@@ -23,10 +23,18 @@
 				<el-card
 					v-for="p in projects"
 					:key="p.id"
-					class="cursor-pointer hover:shadow-lg transition-shadow"
+					class="cursor-pointer hover:shadow-lg transition-shadow relative group"
 					@click="router.push(`/projects/${p.id}`)"
 				>
-					<h3 class="font-semibold text-lg">{{ p.name }}</h3>
+					<el-button
+						class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+						circle
+						size="small"
+						type="danger"
+						:icon="Delete"
+						@click.stop="handleDelete(p.id, p.name)"
+					/>
+					<h3 class="font-semibold text-lg pr-8">{{ p.name }}</h3>
 					<p class="text-sm text-gray-400 mt-2">{{ p.description || '暂无描述' }}</p>
 					<p class="text-xs text-gray-300 mt-3">
 						创建于 {{ new Date(p.createdAt).toLocaleDateString() }}
@@ -58,10 +66,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { UserFilled } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { UserFilled, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { fetchProjects, createProject } from '@/utils/api'
+import { fetchProjects, createProject, deleteProject } from '@/utils/api'
 import type { ProjectListItem } from '@shared/types'
 
 const router = useRouter()
@@ -99,6 +107,24 @@ async function handleCreate() {
 		creating.value = false
 	}
 }
+
+async function handleDelete(id: string, name: string) {
+	try {
+		await ElMessageBox.confirm(`确定要删除项目「${name}」吗？此操作不可撤销。`, '确认删除', {
+			confirmButtonText: '删除',
+			cancelButtonText: '取消',
+			type: 'warning',
+		})
+		await deleteProject(id)
+		projects.value = projects.value.filter((p) => p.id !== id)
+		ElMessage.success('项目已删除')
+	} catch (err: any) {
+		if (err !== 'cancel') {
+			ElMessage.error(err.data?.error || '删除失败')
+		}
+	}
+}
+
 function handleLogout() {
 	auth.logout()
 	router.push('/login')

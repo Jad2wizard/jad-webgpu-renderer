@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { db } from '../db'
 import { projects, layers } from '../db/schema'
+import { defaultScatterStyle, defaultHeatmapStyle } from '../../shared/types'
 
 // ==================== 查询工具 ====================
 
@@ -263,6 +264,89 @@ export const setScatterStyle = tool(
 	}
 )
 
+export const setScatterDataMapping = tool(
+	async ({ projectId, layerId, colorMapping, radiusMapping, clearColorMapping, clearRadiusMapping }) => {
+		const layer = await db().select().from(layers).where(eq(layers.id, layerId)).get()
+		if (!layer) return `错误：图层 ${layerId} 不存在`
+		if (layer.type !== 'scatter') return '错误：此工具仅适用于 scatter 图层'
+
+		const config = JSON.parse(layer.config)
+		config.style ??= {}
+
+		// 处理颜色映射
+		if (clearColorMapping) {
+			delete config.style.colorMapping
+		} else if (colorMapping) {
+			config.style.colorMapping = {
+				r: colorMapping.r,
+				g: colorMapping.g,
+				b: colorMapping.b,
+				a: colorMapping.a,
+			}
+			if (colorMapping.range) {
+				config.style.colorMapping.range = colorMapping.range
+			}
+		}
+
+		// 处理半径映射
+		if (clearRadiusMapping) {
+			delete config.style.radiusMapping
+		} else if (radiusMapping) {
+			config.style.radiusMapping = {
+				field: radiusMapping.field,
+			}
+			if (radiusMapping.range) {
+				config.style.radiusMapping.range = radiusMapping.range
+			}
+		}
+
+		await db()
+			.update(layers)
+			.set({ config: JSON.stringify(config) })
+			.where(eq(layers.id, layerId))
+
+		const parts: string[] = []
+		if (clearColorMapping) parts.push('已清除颜色映射')
+		else if (colorMapping) parts.push(`已设置颜色映射（R:列${colorMapping.r}, G:列${colorMapping.g}, B:列${colorMapping.b}, A:列${colorMapping.a}）`)
+		if (clearRadiusMapping) parts.push('已清除半径映射')
+		else if (radiusMapping) parts.push(`已设置半径映射（列${radiusMapping.field}）`)
+
+		return `散点图层"${layer.name}"：${parts.join('，')}`
+	},
+	{
+		name: 'set_scatter_data_mapping',
+		description:
+			'设置散点图层的数据映射，将数据列映射到颜色通道（RGBA）或半径。数据映射的优先级高于图层默认颜色/半径设置。用户说"根据某列数据设置颜色"、"用第X列映射半径"、"让颜色由数据驱动"时调用。colorMapping 中 r/g/b/a 均为数据列索引（从0开始），range 为可选的归一化范围 [min, max]。radiusMapping 中 field 为数据列索引。',
+		schema: z.object({
+			projectId: z.string(),
+			layerId: z.string(),
+			colorMapping: z
+				.object({
+					r: z.number().describe('红色通道对应的数据列索引（0-based）'),
+					g: z.number().describe('绿色通道对应的数据列索引'),
+					b: z.number().describe('蓝色通道对应的数据列索引'),
+					a: z.number().describe('透明度通道对应的数据列索引'),
+					range: z
+						.tuple([z.number(), z.number()])
+						.optional()
+						.describe('归一化范围 [min, max]，不传则自动推断'),
+				})
+				.optional(),
+			radiusMapping: z
+				.object({
+					field: z.number().describe('半径值对应的数据列索引'),
+					range: z
+						.tuple([z.number(), z.number()])
+						.optional()
+						.describe('半径值范围 [min, max]（像素），不传则 1-255'),
+				})
+				.optional(),
+			clearColorMapping: z.boolean().optional().describe('是否清除已有的颜色映射'),
+			clearRadiusMapping: z.boolean().optional().describe('是否清除已有的半径映射'),
+		}),
+	}
+)
+
 export const setPathStyle = tool(
 	async ({
 		projectId,
@@ -425,6 +509,58 @@ export const removeLayer = tool(
 	}
 )
 
+export const convertLayerType = tool(
+	async ({ projectId, layerId, targetType }) => {
+		const layer = await db().select().from(layers).where(eq(layers.id, layerId)).get()
+		if (!layer) return `错误：图层 ${layerId} 不存在`
+		if (layer.type !== 'scatter' && layer.type !== 'heatmap') {
+			return `错误：此工具仅适用于 scatter 和 heatmap 图层，当前类型为 ${layer.type}`
+		}
+		if (layer.type === targetType) {
+			return `错误：图层"${layer.name}"已经是 ${targetType} 类型`
+		}
+
+		const config = JSON.parse(layer.config)
+		const oldStyle = config.style || {}
+
+		if (layer.type === 'scatter' && targetType === 'heatmap') {
+			// 散点 → 热力图：保留半径和混合模式，热力图其余使用默认值
+			config.style = {
+				colorList: defaultHeatmapStyle.colorList,
+				colorOffsets: defaultHeatmapStyle.colorOffsets,
+				blur: defaultHeatmapStyle.blur,
+				radius: oldStyle.radius ?? defaultHeatmapStyle.radius,
+				blending: oldStyle.blending ?? 'normalBlending',
+			}
+		} else if (layer.type === 'heatmap' && targetType === 'scatter') {
+			// 热力图 → 散点：保留半径和混合模式，散点其余使用默认值
+			config.style = {
+				color: defaultScatterStyle.color,
+				radius: oldStyle.radius ?? defaultScatterStyle.radius,
+				blending: oldStyle.blending ?? 'normalBlending',
+			}
+		}
+
+		await db()
+			.update(layers)
+			.set({ type: targetType, config: JSON.stringify(config) })
+			.where(eq(layers.id, layerId))
+
+		const typeLabel = targetType === 'scatter' ? '散点图层' : '热力图图层'
+		return `已将"${layer.name}"转换为${typeLabel}`
+	},
+	{
+		name: 'convert_layer_type',
+		description:
+			'将散点图层转换为热力图图层，或将热力图图层转换为散点图层。用户说"把散点图转成热力图"、"切换为热力图"、"改成热力图显示"时调用。转换后保留原有的半径和混合模式设置。',
+		schema: z.object({
+			projectId: z.string(),
+			layerId: z.string(),
+			targetType: z.enum(['scatter', 'heatmap']).describe('目标图层类型'),
+		}),
+	}
+)
+
 // ==================== 工具汇总 ====================
 
 export const ALL_TOOLS = [
@@ -436,9 +572,11 @@ export const ALL_TOOLS = [
 	setRadius,
 	setBlendingMode,
 	setScatterStyle,
+	setScatterDataMapping,
 	setPathStyle,
 	setHeatmapStyle,
 	toggleLayerVisibility,
 	reorderLayer,
 	removeLayer,
+	convertLayerType,
 ]

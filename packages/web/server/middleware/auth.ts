@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { eq } from 'drizzle-orm'
 import { config } from '../config'
+import { db } from '../db'
+import { users } from '../db/schema'
 
 // 扩展 Express Request 类型
 declare global {
@@ -24,10 +27,17 @@ export function auth(req: Request, res: Response, next: NextFunction) {
 	try {
 		const payload = jwt.verify(header.slice(7), config.jwtSecret) as { userId: string }
 		req.userId = payload.userId
-		next()
 	} catch {
 		return res.status(401).json({ error: '令牌无效或已过期' })
 	}
+
+	// 校验用户是否仍存在（防止清库后旧 token 导致外键约束失败）
+	const user = db().select().from(users).where(eq(users.id, req.userId!)).get()
+	if (!user) {
+		return res.status(401).json({ error: '用户不存在，请重新登录' })
+	}
+
+	next()
 }
 
 /**
